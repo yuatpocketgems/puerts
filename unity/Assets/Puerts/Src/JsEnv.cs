@@ -180,7 +180,7 @@ namespace Puerts
         public static void ClearAllModuleCaches () {
             lock (jsEnvs)
             {
-                for (JsEnv jsEnv in jsEnvs)
+                foreach (JsEnv jsEnv in jsEnvs)
                 {
                     jsEnv.ClearModuleCache()
                 }
