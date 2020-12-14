@@ -62,7 +62,11 @@ namespace Puerts
         public static Dictionary<string, List<KeyValuePair<object, int>>> GetConfigureByTags(List<string> tags)
         {
             var types = from assembly in AppDomain.CurrentDomain.GetAssemblies()
+            #if NET_STANDARD_2_0
+                        where !(assembly.IsDynamic)
+            #else
                         where !(assembly.ManifestModule is System.Reflection.Emit.ModuleBuilder)
+            #endif
                         from type in assembly.GetTypes()
                         where type.IsDefined(typeof(ConfigureAttribute), false)
                         select type;
@@ -101,7 +105,11 @@ namespace Puerts
         public static List<MethodInfo> GetFilters()
         {
             var types = from assembly in AppDomain.CurrentDomain.GetAssemblies()
+            #if NET_STANDARD_2_0
+                        where !(assembly.IsDynamic)
+            #else
                         where !(assembly.ManifestModule is System.Reflection.Emit.ModuleBuilder)
+            #endif
                         from type in assembly.GetTypes()
                         where type.IsDefined(typeof(ConfigureAttribute), false)
                         select type;
@@ -124,7 +132,11 @@ namespace Puerts
         public static string GetCodeOutputDirectory()
         {
             var types = from assembly in AppDomain.CurrentDomain.GetAssemblies()
+            #if NET_STANDARD_2_0
+                        where !(assembly.IsDynamic)
+            #else
                         where !(assembly.ManifestModule is System.Reflection.Emit.ModuleBuilder)
+            #endif
                         from type in assembly.GetTypes()
                         where type.IsDefined(typeof(ConfigureAttribute), false)
                         select type;
