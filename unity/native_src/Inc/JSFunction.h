@@ -17,8 +17,26 @@
 
 #include "V8Utils.h"
 
+#define FUNCTION_INDEX_KEY  "_psid"
+
 namespace puerts
 {
+class JSObject
+{
+public:
+    JSObject(v8::Isolate* InIsolate, v8::Local<v8::Context> InContext, v8::Local<v8::Object> InObject, int32_t InIndex);
+
+    ~JSObject();
+    
+    v8::Isolate* Isolate;
+
+    v8::UniquePersistent<v8::Context> Context;
+
+    v8::UniquePersistent<v8::Object> GObject;
+
+    int32_t Index;
+};
+
 struct FValue
 {
     JsValueType Type;
@@ -33,14 +51,10 @@ struct FValue
             void *ObjectPtr;
             int ClassID;
         } ObjectInfo;
-        struct
-        {
-            unsigned char *Bytes;
-            int Length;
-        } ArrayBuffer;
-        
         class JSFunction *FunctionPtr;
+        class puerts::JSObject *JSObjectPtr;
     };
+    v8::UniquePersistent<v8::Value> ArrayBuffer;
 };
 
 struct FResultInfo
@@ -55,14 +69,9 @@ struct FResultInfo
 class JSFunction
 {
 public:
-    JSFunction(v8::Isolate* InIsolate, v8::Local<v8::Context> InContext, v8::Local<v8::Function> InFunction);
+    JSFunction(v8::Isolate* InIsolate, v8::Local<v8::Context> InContext, v8::Local<v8::Function> InFunction, int32_t InIndex);
 
-    ~JSFunction()
-    {
-        GFunction.Reset();
-        ResultInfo.Result.Reset();
-        ResultInfo.Context.Reset();
-    }
+    ~JSFunction();
 
     bool Invoke(bool HasResult);
 
@@ -73,5 +82,9 @@ public:
     std::string LastExceptionInfo;
 
     FResultInfo ResultInfo;
+
+    int32_t Index;
+
+    std::vector<v8::Local<v8::Value>> V8Arguments;
 };
 }

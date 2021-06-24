@@ -91,6 +91,10 @@ namespace Puerts.UnitTest
                 baseArr[i] = value;
             }
         }
+
+        public void ActionParam(System.Action action)
+        {
+        }
     }
 
     public class DerivedClass : BaseClass
@@ -325,6 +329,11 @@ namespace Puerts.UnitTest
             Assert.AreEqual(1, Getter.Func<string, int>("a"));
             Assert.AreEqual("aabbcc", Getter.Func<string, string>("b.a"));
         }
+
+        public JSObject passThroughJSObject(JSObject obj) 
+        {
+            return obj;
+        }
     }
 
     public class ArrayTest
@@ -484,6 +493,19 @@ namespace Puerts.UnitTest
         {
             if (b && Callback != null) Callback();
             return true;
+        }
+    }
+    
+    public class TypedValue
+    {
+        static object lastCallbackValue = null;
+        public static void Callback(object o)
+        {
+            lastCallbackValue = o;
+        }
+        public static Type GetLastCallbackValueType() 
+        {
+            return lastCallbackValue == null ? null : lastCallbackValue.GetType();
         }
     }
 }

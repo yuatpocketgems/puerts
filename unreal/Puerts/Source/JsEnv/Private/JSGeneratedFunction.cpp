@@ -11,14 +11,14 @@ DEFINE_FUNCTION(UJSGeneratedFunction::execCallJS)
 {
     UJSGeneratedFunction *Func = Cast<UJSGeneratedFunction>(Stack.CurrentNativeFunction ? Stack.CurrentNativeFunction : Stack.Node);
     check(Func);
-    //UE_LOG(LogTemp, Warning, TEXT("overrided function called, %s"), *Func->GetName());
+    //UE_LOG(LogTemp, Warning, TEXT("overrided function called, %s(%p)"), *Func->GetName(), Func);
 
     if (Func)
     {
         auto PinedDynamicInvoker = Func->DynamicInvoker.Pin();
         if (PinedDynamicInvoker)
         {
-            PinedDynamicInvoker->InvokeJsMethod(Func, Stack, RESULT_PARAM);
+            PinedDynamicInvoker->InvokeJsMethod(Context, Func, Stack, RESULT_PARAM);
         }
     }
 }

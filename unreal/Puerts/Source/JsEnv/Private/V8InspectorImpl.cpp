@@ -11,7 +11,7 @@
 #define USING_UE 0
 #endif
 
-#if PLATFORM_WINDOWS || PLATFORM_MAC
+#if (PLATFORM_WINDOWS || PLATFORM_MAC || WITH_INSPECTOR) && !WITHOUT_INSPECTOR
 
 #include "V8InspectorImpl.h"
 
@@ -27,9 +27,7 @@
 #include "libplatform/libplatform.h"
 #pragma warning(pop)
 
-#if PLATFORM_MAC
-#define ASIO_NO_TYPEID  // Mac下需避免使用RTTI功能
-#endif
+#define ASIO_NO_TYPEID  // UE需避免使用RTTI功能
 
 #define ASIO_STANDALONE
 #define _WEBSOCKETPP_CPP11_TYPE_TRAITS_
@@ -48,14 +46,14 @@ DEFINE_LOG_CATEGORY_STATIC(LogV8Inspector, Log, All);
 
 namespace puerts
 {
-class V8InspectorChannelImpl : public v8_inspector::V8Inspector::Channel
+class V8InspectorChannelImpl : public v8_inspector::V8Inspector::Channel, public V8InspectorChannel
 {
 public:
-    V8InspectorChannelImpl(const std::unique_ptr<v8_inspector::V8Inspector>& InV8Inspector, const int32_t InCxtGroupID, v8::Isolate* InIsolate);
+    V8InspectorChannelImpl(const std::unique_ptr<v8_inspector::V8Inspector>& InV8Inspector, const int32_t InCxtGroupID);
 
-    void ReceiveMessage(const std::string& Message);
+    void DispatchProtocolMessage(const std::string& Message) override;
 
-    std::function<void(const std::string&)> OnSendMessage;
+    void OnMessage(std::function<void(const std::string&)> Handler) override;
 
 private:
     void SendMessage(v8_inspector::StringBuffer& MessageBuffer);
@@ -68,24 +66,27 @@ private:
 
     std::unique_ptr<v8_inspector::V8InspectorSession> V8InspectorSession;
 
-    v8::Isolate* Isolate;
+    std::function<void(const std::string&)> OnSendMessage;
 };
 
-V8InspectorChannelImpl::V8InspectorChannelImpl(const std::unique_ptr<v8_inspector::V8Inspector>& InV8Inspector, const int32_t InCxtGroupID, v8::Isolate* InIsolate)
+V8InspectorChannelImpl::V8InspectorChannelImpl(const std::unique_ptr<v8_inspector::V8Inspector>& InV8Inspector, const int32_t InCxtGroupID)
 {
-    Isolate = InIsolate;
-
     v8_inspector::StringView DummyState;
     V8InspectorSession = InV8Inspector->connect(InCxtGroupID, this, DummyState);
 }
 
-void V8InspectorChannelImpl::ReceiveMessage(const std::string& Message)
+void V8InspectorChannelImpl::DispatchProtocolMessage(const std::string& Message)
 {
     const auto MessagePtr = reinterpret_cast<const uint8_t*>(Message.c_str());
     const auto MessageLen = (size_t)Message.length();
 
     v8_inspector::StringView StringView(MessagePtr, MessageLen);
     V8InspectorSession->dispatchProtocolMessage(StringView);
+}
+
+void V8InspectorChannelImpl::OnMessage(std::function<void(const std::string&)> Handler)
+{
+    OnSendMessage = Handler;
 }
 
 void V8InspectorChannelImpl::SendMessage(v8_inspector::StringBuffer& MessageBuffer)
@@ -151,6 +152,8 @@ public:
 #endif
 
     bool Tick() override;
+    
+    V8InspectorChannel* CreateV8InspectorChannel() override;
 
 private:
     void OnHTTP(wspp_connection_hdl Handle);
@@ -198,6 +201,27 @@ private:
     bool Connected;
 };
 
+#if USING_UE
+void ReportException(const websocketpp::exception& Exception, const TCHAR *JobInfo)  
+{
+#if PLATFORM_WINDOWS
+    int len = MultiByteToWideChar(CP_ACP, 0, Exception.what(), -1, NULL, 0);  
+    wchar_t* wstr = new wchar_t[len+1];  
+    memset(wstr, 0, len+1);  
+    MultiByteToWideChar(CP_ACP, 0, Exception.what(), -1, wstr, len);  
+    len = WideCharToMultiByte(CP_UTF8, 0, wstr, -1, NULL, 0, NULL, NULL);  
+    char* str = new char[len+1];  
+    memset(str, 0, len+1);  
+    WideCharToMultiByte(CP_UTF8, 0, wstr, -1, str, len, NULL, NULL);  
+    if(wstr) delete[] wstr;
+    UE_LOG(LogV8Inspector, Warning, TEXT("%s, errno:%d, message:%s"), JobInfo, Exception.code().value(), UTF8_TO_TCHAR(str));
+    delete str;
+#else
+    UE_LOG(LogV8Inspector, Warning, TEXT("%s, errno:%d, message:%s"), JobInfo, Exception.code().value(), ANSI_TO_TCHAR(Exception.what()));
+#endif
+}
+#endif
+
 V8InspectorClientImpl::V8InspectorClientImpl(int32_t InPort, v8::Local<v8::Context> InContext)
 #if USING_UE
     : FTickerObjectBase(0.001f)
@@ -214,9 +238,12 @@ V8InspectorClientImpl::V8InspectorClientImpl(int32_t InPort, v8::Local<v8::Conte
     v8_inspector::StringView CtxName(CtxNameConst, sizeof(CtxNameConst) - 1);
     V8Inspector = v8_inspector::V8Inspector::create(Isolate, this);
     V8Inspector->contextCreated(v8_inspector::V8ContextInfo(InContext, CtxGroupID, CtxName));
+    
+    if (Port < 0) return;
 
     try
     {
+        Server.set_reuse_addr(true);
         Server.set_access_channels(websocketpp::log::alevel::none);
         Server.set_error_channels(websocketpp::log::elevel::none);
 
@@ -231,14 +258,14 @@ V8InspectorClientImpl::V8InspectorClientImpl(int32_t InPort, v8::Local<v8::Conte
         Server.start_accept();
 
         JSONVersion = R"({
-        "Browser": "TGameJS/v1.0.0",
+        "Browser": "Puerts/v1.0.0",
         "Protocol-Version": "1.1"
         })";
 
         JSONList = R"([{
-        "description": "TGameJS Inspector",
+        "description": "Puerts Inspector",
         "id": "0",
-        "title": "TGameJS Inspector",
+        "title": "Puerts Inspector",
         "type": "node",
         )";
         JSONList += "\"webSocketDebuggerUrl\"";
@@ -259,8 +286,7 @@ V8InspectorClientImpl::V8InspectorClientImpl(int32_t InPort, v8::Local<v8::Conte
     {
         IsAlive = false;
 #if USING_UE
-        UE_LOG(LogV8Inspector, Error, TEXT("V8InspectorClientImpl: %s"), ANSI_TO_TCHAR(Exception.what()));
-        UE_LOG(LogV8Inspector, Error, TEXT("Failed to Startup Inspector."));
+        ReportException(Exception, TEXT("Failed to Startup Inspector"));
 #else
         PLog(Error, "V8InspectorClientImpl: %s", Exception.what());
         PLog(Error, "Failed to Startup Inspector.");
@@ -268,6 +294,11 @@ V8InspectorClientImpl::V8InspectorClientImpl(int32_t InPort, v8::Local<v8::Conte
     }
 
     IsPaused = false;
+}
+
+V8InspectorChannel* V8InspectorClientImpl::CreateV8InspectorChannel()
+{
+    return new V8InspectorChannelImpl(V8Inspector, CtxGroupID);
 }
 
 V8InspectorClientImpl::~V8InspectorClientImpl()
@@ -302,8 +333,7 @@ bool V8InspectorClientImpl::Tick(float /* DeltaTime */)
     catch (const wspp_exception& Exception)
     {
 #if USING_UE
-        // TODO - 解决乱码问题（疑似utf8编解码问题）
-        UE_LOG(LogV8Inspector, Error, TEXT("Tick: %s"), ANSI_TO_TCHAR(Exception.what()));
+        ReportException(Exception, TEXT("Tick"));
 #else
         PLog(Error, "Tick: %s", Exception.what());
 #endif
@@ -346,6 +376,11 @@ void V8InspectorClientImpl::OnHTTP(wspp_connection_hdl Handle)
         }
         else
         {
+#if USING_UE
+            UE_LOG(LogV8Inspector, Display, TEXT("404 Not Found"));
+#else
+            PLog(Log, "404 Not Found");
+#endif
             Connection->set_body("404 Not Found");
             Connection->set_status(websocketpp::http::status_code::not_found);
         }
@@ -353,7 +388,7 @@ void V8InspectorClientImpl::OnHTTP(wspp_connection_hdl Handle)
     catch (const wspp_exception& Exception)
     {
 #if USING_UE
-        UE_LOG(LogV8Inspector, Error, TEXT("OnHTTP: %s"), ANSI_TO_TCHAR(Exception.what()));
+        ReportException(Exception, TEXT("OnHTTP"));
 #else
         PLog(Error, "OnHTTP: %s", Exception.what());
 #endif
@@ -362,8 +397,8 @@ void V8InspectorClientImpl::OnHTTP(wspp_connection_hdl Handle)
 
 void V8InspectorClientImpl::OnOpen(wspp_connection_hdl Handle)
 {
-    V8InspectorChannel.reset(new V8InspectorChannelImpl(V8Inspector, CtxGroupID, Isolate));
-    V8InspectorChannel->OnSendMessage = std::bind(&V8InspectorClientImpl::OnSendMessage, this, Handle, std::placeholders::_1);
+    V8InspectorChannel.reset(new V8InspectorChannelImpl(V8Inspector, CtxGroupID));
+    V8InspectorChannel->OnMessage(std::bind(&V8InspectorClientImpl::OnSendMessage, this, Handle, std::placeholders::_1));
 #if USING_UE
     UE_LOG(LogV8Inspector, Display, TEXT("Inspector: Connect"));
 #else
@@ -379,7 +414,7 @@ void V8InspectorClientImpl::OnReceiveMessage(wspp_connection_hdl Handle, wspp_me
 //    PLog(Log, "<---: %s", Message->get_payload().c_str());
 //#endif
 
-    V8InspectorChannel->ReceiveMessage(Message->get_payload());
+    V8InspectorChannel->DispatchProtocolMessage(Message->get_payload());
 }
     
 void V8InspectorClientImpl::OnSendMessage(wspp_connection_hdl Handle, const std::string& Message)
@@ -397,7 +432,7 @@ void V8InspectorClientImpl::OnSendMessage(wspp_connection_hdl Handle, const std:
     catch (const websocketpp::exception& Exception)
     {
 #if USING_UE
-        UE_LOG(LogV8Inspector, Error, TEXT("OnSendMessage: %s"), ANSI_TO_TCHAR(Exception.what()));
+        ReportException(Exception, TEXT("OnSendMessage"));
 #else
         PLog(Error, "OnSendMessage: %s", Exception.what());
 #endif

@@ -7,7 +7,7 @@
 
 #include "TickerDelegateWrapper.h"
 
-#if PLATFORM_ANDROID || PLATFORM_WINDOWS || PLATFORM_IOS || PLATFORM_MAC
+#if PLATFORM_ANDROID || PLATFORM_WINDOWS || PLATFORM_IOS || PLATFORM_MAC || PLATFORM_LINUX
 
 FTickerDelegateWrapper::FTickerDelegateWrapper(bool Continue): 
     FunctionContinue(Continue), DelegateHandle(nullptr)
@@ -60,7 +60,9 @@ bool FTickerDelegateWrapper::CallFunction(float)
     v8::Local<v8::Function> Function = v8::Local<v8::Function>::New(GetIsolate(), GetFunction());
 
     v8::TryCatch TryCatch(GetIsolate());
+    IsCalling = true;
     v8::MaybeLocal<v8::Value> Result = Function->Call(Context, Context->Global(), 0, nullptr);
+    IsCalling = false;
     if (TryCatch.HasCaught())
     {
         ExceptionHandler(GetIsolate(), &TryCatch);
@@ -78,4 +80,4 @@ void FTickerDelegateWrapper::SetDelegateHandle(FDelegateHandle* Handle)
     DelegateHandle = Handle;
 }
 
-#endif  // PLATFORM_ANDROID || PLATFORM_WINDOWS || PLATFORM_IOS || PLATFORM_MAC
+#endif  // PLATFORM_ANDROID || PLATFORM_WINDOWS || PLATFORM_IOS || PLATFORM_MAC || PLATFORM_LINUX

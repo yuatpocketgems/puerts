@@ -212,17 +212,42 @@ namespace Puerts.Editor
             return result;
         }
 
-        static MethodGenInfo ToMethodGenInfo(List<MethodBase> overloads)
+        static MethodGenInfo ToMethodGenInfo(Type type, bool isCtor, List<MethodBase> overloads)
         {
             var ret = new List<OverloadGenInfo>();
             foreach (var iBase in overloads)
             {
                 ret.AddRange(ToOverloadGenInfo(iBase));
             }
+            
+            string name;
+            bool isStatic;
+            if (isCtor) {
+                if (type.IsValueType)//值类型添加无参构造
+                {
+                    if (!ret.Exists(m => m.ParameterInfos.Length == 0))
+                    {
+                        ret.Add(new OverloadGenInfo()
+                        {
+                            ParameterInfos = new ParameterGenInfo[] { },
+                            TypeName = type.GetFriendlyName(),
+                            IsVoid = false
+                        });
+                    }
+                }
+                // 如果是构造函数此处固定赋值，因为像结构体的情况overloads不一定有含有元素
+                name = ".ctor";
+                isStatic = false;
+
+            } else {
+                name = overloads[0].Name;
+                isStatic = overloads[0].IsStatic;
+            }
+            
             var result = new MethodGenInfo()
             {
-                Name = overloads[0].Name,
-                IsStatic = overloads[0].IsStatic,
+                Name = name,
+                IsStatic = isStatic,
                 HasOverloads = ret.Count > 1,
                 OverloadCount = ret.Count,
                 OverloadGroups = ret.GroupBy(m => m.ParameterInfos.Length + (m.HasParams ? 0 : 9999)).Select(lst => lst.ToArray()).ToArray()
@@ -370,9 +395,9 @@ namespace Puerts.Editor
             {
                 WrapClassName = GetWrapTypeName(type),
                 Name = type.GetFriendlyName(),
-                Methods = methodGroups.Select(m => ToMethodGenInfo(m)).ToArray(),
+                Methods = methodGroups.Select(m => ToMethodGenInfo(type, false, m)).ToArray(),
                 IsValueType = type.IsValueType,
-                Constructor = (!type.IsAbstract && constructors.Count > 0) ? ToMethodGenInfo(constructors) : null,
+                Constructor = !type.IsAbstract ? ToMethodGenInfo(type, true, constructors) : null,
                 Properties = type.GetProperties(Flags)
                     .Where(m => !isFiltered(m))
                     .Where(p => !p.IsSpecialName && p.GetIndexParameters().GetLength(0) == 0)
@@ -380,7 +405,7 @@ namespace Puerts.Editor
                         type.GetFields(Flags).Where(m => !isFiltered(m)).Select(f => ToPropertyGenInfo(f))).ToArray(),
                 GetIndexs = indexs.Where(i => i.HasGetter).ToArray(),
                 SetIndexs = indexs.Where(i => i.HasSetter).ToArray(),
-                Operators = operatorGroups.Select(m => ToMethodGenInfo(m)).ToArray(),
+                Operators = operatorGroups.Select(m => ToMethodGenInfo(type, false, m)).ToArray(),
                 Events = type.GetEvents(Flags).Where(m => !isFiltered(m)).Select(e => ToEventGenInfo(e)).ToArray(),
             };
         }
@@ -397,7 +422,23 @@ namespace Puerts.Editor
             public string TypeName;
             public bool IsParams;
             public bool IsOptional;
-
+            public override bool Equals(object obj)
+            {
+                if (obj != null && obj is TsParameterGenInfo)
+                {
+                    var info = (TsParameterGenInfo)obj;
+                    return this.Name == info.Name && this.TypeName == info.TypeName && this.IsByRef != info.IsByRef && this.IsParams != info.IsParams && this.IsOptional != info.IsOptional;
+                }
+                return base.Equals(obj);
+            }
+            public override int GetHashCode()
+            {
+                return base.GetHashCode();
+            }
+            public override string ToString()
+            {
+                return base.ToString();
+            }
         }
 
         // #lizard forgives
@@ -437,7 +478,7 @@ namespace Puerts.Editor
                 return "ArrayBuffer";
             else if (type == typeof(object))
                 return "any";
-            else if (type == typeof(Delegate))
+            else if (type == typeof(Delegate) || type == typeof(Puerts.GenericDelegate))
                 return "Function";
             else if (type.IsByRef)
                 return "$Ref<" + GetTsTypeName(type.GetElementType()) + ">";
@@ -478,6 +519,30 @@ namespace Puerts.Editor
             public string TypeName;
             public bool IsConstructor;
             public bool IsStatic;
+            public override bool Equals(object obj)
+            {
+                if (obj != null && obj is TsMethodGenInfo)
+                {
+                    var info = (TsMethodGenInfo)obj;
+                    if (this.ParameterInfos.Length != info.ParameterInfos.Length || this.Name != info.Name || this.TypeName != info.TypeName || this.IsConstructor != info.IsConstructor || this.IsStatic != info.IsStatic)
+                        return false;
+                    for (int i = 0; i < this.ParameterInfos.Length; i++)
+                    {
+                        if (!this.ParameterInfos[i].Equals(info.ParameterInfos[i]))
+                            return false;
+                    }
+                    return true;
+                }
+                return base.Equals(obj);
+            }
+            public override int GetHashCode()
+            {
+                return base.GetHashCode();
+            }
+            public override string ToString()
+            {
+                return base.ToString();
+            }
         }
 
         public class TsPropertyGenInfo
@@ -518,9 +583,11 @@ namespace Puerts.Editor
             public bool IsInterface;
             public string Namespace;
             public TsTypeGenInfo BaseType;
+            public TsTypeGenInfo[] interfaces;
             public bool IsEnum;
             public string EnumKeyValues;
             public TsMethodGenInfo[] ExtensionMethods;
+            public bool IsCheckOk = false;
         }
 
         public static bool IsGetterOrSetter(MethodInfo method)
@@ -547,19 +614,19 @@ namespace Puerts.Editor
 
         static bool IsStatic(PropertyInfo propertyInfo)
         {
-            var getMethod = propertyInfo.GetGetMethod();
-            var setMethod = propertyInfo.GetSetMethod();
+            var getMethod = propertyInfo.GetMethod;
+            var setMethod = propertyInfo.SetMethod;
             return getMethod == null ? setMethod.IsStatic : getMethod.IsStatic;
         }
 
         static MethodInfo[] GetMethodsForTsTypeGen(Type type, HashSet<Type> genTypeSet)
         {
-            var declMethods = type.GetMethods(Flags)
+            var declMethods = type.GetMethods(Flags | BindingFlags.NonPublic)
                 .Where(m => m.GetBaseDefinition() == m || !genTypeSet.Contains(m.GetBaseDefinition().DeclaringType)).ToArray();
 
             var methodNames = declMethods.Select(m => m.Name).ToArray();
 
-            return type.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static)
+            return type.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static)
                 .Where(m => genTypeSet.Contains(m.DeclaringType) && methodNames.Contains(m.Name))
                 .Concat(declMethods).Distinct().ToArray();
         }
@@ -572,13 +639,13 @@ namespace Puerts.Editor
                 Document = DocResolver.GetTsDocument(type), 
                 Methods = genTypeSet.Contains(type) ? (type.IsAbstract ? new MethodBase[] { } : type.GetConstructors(Flags).Where(m => !isFiltered(m)).Cast<MethodBase>())
                     .Concat(GetMethodsForTsTypeGen(type, genTypeSet)
-                        .Where(m => !isFiltered(m) && !IsGetterOrSetter(m) && (type.IsGenericTypeDefinition && !m.IsGenericMethodDefinition || Puerts.Utils.IsSupportedMethod(m)))
+                        .Where(m => !isFiltered(m, true) && !IsGetterOrSetter(m) && (type.IsGenericTypeDefinition && !m.IsGenericMethodDefinition || Puerts.Utils.IsSupportedMethod(m)))
                         .Cast<MethodBase>())
                     .Select(m => ToTsMethodGenInfo(m, type.IsGenericTypeDefinition, false)).ToArray() : new TsMethodGenInfo[] { },
-                Properties = genTypeSet.Contains(type) ? type.GetFields(Flags).Where(m => !isFiltered(m))
+                Properties = genTypeSet.Contains(type) ? type.GetFields(Flags | BindingFlags.NonPublic).Where(m => !isFiltered(m, true))
                     .Select(f => new TsPropertyGenInfo() { Name = f.Name, Document = DocResolver.GetTsDocument(f),  TypeName = GetTsTypeName(f.FieldType), IsStatic = f.IsStatic })
                     .Concat(
-                        type.GetProperties(Flags).Where(m => m.Name != "Item").Where(m => !isFiltered(m))
+                        type.GetProperties(Flags | BindingFlags.NonPublic).Where(m => m.Name != "Item").Where(m => !isFiltered(m, true))
                         .Select(p => new TsPropertyGenInfo() { Name = p.Name, Document = DocResolver.GetTsDocument(p),  TypeName = GetTsTypeName(p.PropertyType), IsStatic = IsStatic(p), HasGetter = p.GetMethod != null && p.GetMethod.IsPublic, HasSetter = p.SetMethod != null && p.SetMethod.IsPublic }))
                     .ToArray() : new TsPropertyGenInfo[] { },
                 IsGenericTypeDefinition = type.IsGenericTypeDefinition,
@@ -605,6 +672,27 @@ namespace Puerts.Editor
                     var tsFuncDef = "(" + string.Join(", ", m.GetParameters().Select(p => p.Name + ": " + GetTsTypeName(p.ParameterType)).ToArray()) + ") => " + GetTsTypeName(m.ReturnType);
                     result.DelegateDef = tsFuncDef;
                 }
+            }
+
+            Type[] interfaces = type.GetInterfaces();
+            if (interfaces != null && interfaces.Length > 0) 
+            {
+                List<TsTypeGenInfo> genInfoList = new List<TsTypeGenInfo>();
+
+                for (int i = 0; i < interfaces.Length; i++) {
+                    var interfaceTypeGenInfo = new TsTypeGenInfo()
+                    {
+                        Name = interfaces[i].IsGenericType ? GetTsTypeName(interfaces[i]): interfaces[i].Name.Replace('`', '$'),
+                        Document = DocResolver.GetTsDocument(interfaces[i]),
+                        Namespace = interfaces[i].Namespace
+                    };
+                    if (interfaces[i].IsGenericType && interfaces[i].Namespace != null)
+                    {
+                        interfaceTypeGenInfo.Name = interfaceTypeGenInfo.Name.Substring(interfaces[i].Namespace.Length + 1);
+                    }
+                    genInfoList.Add(interfaceTypeGenInfo);
+                }
+                result.interfaces = genInfoList.ToArray();
             }
 
             if (type.IsNested)
@@ -676,45 +764,106 @@ namespace Puerts.Editor
             return type;
         }
 
-        static bool isFiltered(MemberInfo mb)
+        static bool isFiltered(MemberInfo mbi, bool notFiltEII = false)
         {
-            if (mb == null) return false;
-            ObsoleteAttribute oa = mb.GetCustomAttributes(typeof(ObsoleteAttribute), false).FirstOrDefault() as ObsoleteAttribute;
+            if (mbi == null) return false;
+            ObsoleteAttribute oa = mbi.GetCustomAttributes(typeof(ObsoleteAttribute), false).FirstOrDefault() as ObsoleteAttribute;
             if (oa != null/* && oa.IsError*/) //希望只过滤掉Error类别过时方法可以把oa.IsError加上
             {
                 return true;
             }
 
-            if (mb is FieldInfo && (mb as FieldInfo).FieldType.IsPointer) return true;
-            if (mb is PropertyInfo && (mb as PropertyInfo).PropertyType.IsPointer) return true;
-            if (mb is MethodInfo && (mb as MethodInfo).ReturnType.IsPointer) return true;
+            if (mbi is FieldInfo) 
+            {
+                FieldInfo fi = (mbi as FieldInfo);
+                if (fi.FieldType.IsPointer) 
+                {
+                    return true;
+                }
+                if (!fi.IsPublic)
+                {
+                    if (notFiltEII) 
+                    {
+                        return !fi.Name.Contains("."); /*explicit interface implementation*/
+                    }
+                    return true;    
+                }
+            };
+            if (mbi is PropertyInfo) 
+            {
+                PropertyInfo pi = (mbi as PropertyInfo);
+                if (pi.PropertyType.IsPointer) {
+                    return true;
+                }
+                if (!(
+                    (pi.GetMethod != null && pi.GetMethod.IsPublic) ||
+                    (pi.SetMethod != null && pi.SetMethod.IsPublic)
+                )) {
+                    if (notFiltEII)
+                    {
+                        return !pi.Name.Contains(".");
+                    }
+                    return true;
+                }
+            }
+            if (mbi is MethodInfo) 
+            {
+                MethodInfo mi = mbi as MethodInfo;
+                if (mi.ReturnType.IsPointer)
+                {
+                    return true;
+                }
+                if (!mi.IsPublic) 
+                {
+                    if (notFiltEII) 
+                    {
+                        return !mi.Name.Contains(".");
+                    }
+                    return true;
+                }
+            }
 
             if (filters != null && filters.Count > 0)
             {
                 foreach (var filter in filters)
                 {
-                    if ((bool)filter.Invoke(null, new object[] { mb }))
+                    if ((bool)filter.Invoke(null, new object[] { mbi }))
                     {
                         return true;
                     }
                 }
             }
 
-            if (mb is MethodBase && (mb as MethodBase).GetParameters().Any(pInfo => pInfo.ParameterType.IsPointer)) return true;
-
+            if (mbi is MethodBase)
+            {
+                MethodBase mb = mbi as MethodBase;
+                if (mb.GetParameters().Any(pInfo => pInfo.ParameterType.IsPointer)) {
+                    return true;
+                }
+                if (!mb.IsPublic) 
+                {
+                    return true;
+                }
+            }
             return false;
         }
 
-        static void AddRefType(HashSet<Type> refTypes, Type type)
+        static void AddRefType(HashSet<Type> workTypes, HashSet<Type> refTypes, Type type)
         {
+            if (type.Name.StartsWith("<")) return;
+            if (workTypes.Contains(type)) return;
+            workTypes.Add(type);
+
             var rawType = GetRawType(type);
+				
             if (type.IsGenericType)
             {
                 foreach (var gt in type.GetGenericArguments())
                 {
-                    AddRefType(refTypes, gt);
+                    AddRefType(workTypes, refTypes, gt);
                 }
             }
+            
             if (refTypes.Contains(rawType) || type.IsPointer || rawType.IsPointer) return;
             if (!rawType.IsGenericParameter)
             {
@@ -724,20 +873,28 @@ namespace Puerts.Editor
             if (IsDelegate(type) && type != typeof(Delegate) && type != typeof(MulticastDelegate))
             {
                 MethodInfo delegateMethod = type.GetMethod("Invoke");
-                AddRefType(refTypes, delegateMethod.ReturnType);
+                AddRefType(workTypes, refTypes, delegateMethod.ReturnType);
                 foreach (var pinfo in delegateMethod.GetParameters())
                 {
-                    AddRefType(refTypes, pinfo.ParameterType);
+                    AddRefType(workTypes, refTypes, pinfo.ParameterType);
                 }
             }
 
             var baseType = type.BaseType;
             while (baseType != null)
             {
-                AddRefType(refTypes, baseType);
+                AddRefType(workTypes, refTypes, baseType);
                 baseType = baseType.BaseType;
             }
             
+            Type[] interfaces = type.GetInterfaces();
+            if (interfaces != null && interfaces.Length > 0) 
+            {
+                for (int i = 0; i < interfaces.Length; i++)
+                {
+                    AddRefType(workTypes, refTypes, interfaces[i]);
+                }
+            }
         }
 
         public class TypingGenInfo
@@ -747,44 +904,145 @@ namespace Puerts.Editor
             public string TaskDef;
         }
 
+        static TsMethodGenInfo[] GetMethodGenInfos(Dictionary<string, TsTypeGenInfo> tsGenTypeInfos, TsTypeGenInfo info, bool getBaseMethods)
+        {
+            var result = new List<TsMethodGenInfo>();
+            if (info.Methods != null) result.AddRange(info.Methods);
+            if (info.ExtensionMethods != null)
+            {
+                foreach (var m in info.ExtensionMethods)
+                {
+                    result.Add(new TsMethodGenInfo()
+                    {
+                        Name = m.Name,
+                        Document = m.Document,
+                        ParameterInfos = m.ParameterInfos,
+                        IsConstructor = m.IsConstructor,
+                        IsStatic = false,
+                    });
+                }
+            }
+            if (getBaseMethods && info.BaseType != null)
+            {
+                var baseInfo = info.BaseType;
+                var baseName = (!string.IsNullOrEmpty(baseInfo.Namespace) ? (baseInfo.Namespace + ".") : "") + baseInfo.Name;
+                if (tsGenTypeInfos.TryGetValue(baseName, out baseInfo))
+                {
+                    foreach (var m in GetMethodGenInfos(tsGenTypeInfos, baseInfo, true))
+                    {
+                        if (!result.Contains(m)) result.Add(m);
+                    }
+                }
+            }
+            return result.ToArray();
+        }
+        static Dictionary<string, List<TsMethodGenInfo>> SelectMethodGenInfos(Dictionary<string, TsTypeGenInfo> tsGenTypeInfos, TsTypeGenInfo info, bool getBaseMethods)
+        {
+            var result = new Dictionary<string, List<TsMethodGenInfo>>();
+            foreach (var m in GetMethodGenInfos(tsGenTypeInfos, info, getBaseMethods))
+            {
+                if (!result.ContainsKey(m.Name))
+                    result.Add(m.Name, new List<TsMethodGenInfo>());
+                result[m.Name].Add(m);
+            }
+            return result;
+        }
+        static void CheckMethodGenInfos(Dictionary<string, TsTypeGenInfo> tsGenTypeInfos, TsTypeGenInfo info)
+        {
+            if (info.IsCheckOk || info.BaseType == null)
+                return;
+
+            var baseInfo = info.BaseType;
+            var baseName = (!string.IsNullOrEmpty(baseInfo.Namespace) ? (baseInfo.Namespace + ".") : "") + baseInfo.Name;
+            if (tsGenTypeInfos.TryGetValue(baseName, out baseInfo) && info.Methods != null && baseInfo.Methods != null)
+            {
+                CheckMethodGenInfos(tsGenTypeInfos, baseInfo);
+
+                var methods1 = SelectMethodGenInfos(tsGenTypeInfos, baseInfo, true);
+                var methods2 = SelectMethodGenInfos(tsGenTypeInfos, info, false);
+
+                var select = new List<TsMethodGenInfo>(info.Methods);
+                foreach (var pair in methods1)
+                {
+                    var name = pair.Key;
+                    if (!methods2.ContainsKey(name))
+                        continue;
+                    var ms1 = pair.Value;
+                    var ms2 = methods2[name];
+                    if (ms2.Count == 0)
+                        continue;
+                    var diffms = new List<TsMethodGenInfo>();
+                    foreach (var m1 in ms1)
+                    {
+                        var diff = true;
+                        foreach (var m2 in ms2)
+                        {
+                            if (m1.Equals(m2)) { diff = false; break; }
+                        }
+                        if (diff) diffms.Add(m1);
+                    }
+                    if (ms2.Count + diffms.Count != ms1.Count)
+                    {
+                        select.AddRange(diffms);
+                    }
+                }
+                info.Methods = select.ToArray();
+            }
+            info.IsCheckOk = true;
+        }
         static TypingGenInfo ToTypingGenInfo(IEnumerable<Type> types)
         {
             HashSet<Type> genTypeSet = new HashSet<Type>();
 
+            HashSet<Type> workTypes = new HashSet<Type>();
             HashSet<Type> refTypes = new HashSet<Type>();
 
             foreach (var type in types)
             {
-                AddRefType(refTypes, type);
+                AddRefType(workTypes, refTypes, type);
                 var defType = type.IsGenericType ? type.GetGenericTypeDefinition() : type;
                 if (!genTypeSet.Contains(defType)) genTypeSet.Add(defType);
                 foreach (var field in type.GetFields(Flags))
                 {
-                    AddRefType(refTypes, field.FieldType);
+                    AddRefType(workTypes, refTypes, field.FieldType);
                 }
 
                 foreach(var method in type.GetMethods(Flags))
                 {
-                    AddRefType(refTypes, method.ReturnType);
+                    AddRefType(workTypes, refTypes, method.ReturnType);
                     foreach(var pinfo in method.GetParameters())
                     {
-                        AddRefType(refTypes, pinfo.ParameterType);
+                        AddRefType(workTypes, refTypes, pinfo.ParameterType);
                     }
                 }
                 foreach(var constructor in type.GetConstructors())
                 {
                     foreach (var pinfo in constructor.GetParameters())
                     {
-                        AddRefType(refTypes, pinfo.ParameterType);
+                        AddRefType(workTypes, refTypes, pinfo.ParameterType);
                     }
                 }
             }
 
-            if (!genTypeSet.Contains(typeof(Array)) && !refTypes.Contains(typeof(Array))) AddRefType(refTypes, typeof(Array));
+            if (!genTypeSet.Contains(typeof(Array)) && !refTypes.Contains(typeof(Array))) AddRefType(workTypes, refTypes, typeof(Array));
+
+            var tsTypeGenInfos = new Dictionary<string, TsTypeGenInfo>();
+            foreach (var t in refTypes.Distinct())
+            {
+                var info = ToTsTypeGenInfo(t, genTypeSet);
+                var name = (string.IsNullOrEmpty(info.Namespace) ? "" : (info.Namespace + ".")) + info.Name;
+                if (info.IsGenericTypeDefinition)
+                    name += "<" + string.Join(",", info.GenericParameters) + ">";
+                tsTypeGenInfos.Add(name, info);
+            }
+            foreach (var info in tsTypeGenInfos)
+            {
+                CheckMethodGenInfos(tsTypeGenInfos, info.Value);
+            }
 
             return new TypingGenInfo()
             {
-                NamespaceInfos = refTypes.Distinct().Select(t => ToTsTypeGenInfo(t, genTypeSet)).GroupBy(t => t.Namespace)
+                NamespaceInfos = tsTypeGenInfos.Values.GroupBy(t => t.Namespace)
                     .Select(g => new TsNamespaceGenInfo()
                     {
                         Name = g.Key,
@@ -893,7 +1151,8 @@ namespace Puerts.Editor
             var genTypes = configure["Puerts.BindingAttribute"].Select( kv => kv.Key)
                 .Where(o => o is Type)
                 .Cast<Type>()
-                .Where(t => !t.IsGenericTypeDefinition);
+                .Where(t => !t.IsGenericTypeDefinition && !t.Name.StartsWith("<"))
+                .Distinct();
 
             var blittableCopyTypes = new HashSet<Type>(configure["Puerts.BlittableCopyAttribute"].Select(kv => kv.Key)
                 .Where(o => o is Type)
@@ -916,6 +1175,8 @@ namespace Puerts.Editor
                 if (!tsOnly)
                 {
                     var typeGenInfos = new List<TypeGenInfo>();
+
+                    Dictionary<string, bool> makeFileUniqueMap = new Dictionary<string, bool>();
                     foreach (var type in genTypes)
                     {
                         if (type.IsEnum || type.IsArray || (IsDelegate(type) && type != typeof(Delegate))) continue;
@@ -923,6 +1184,14 @@ namespace Puerts.Editor
                         typeGenInfo.BlittableCopy = blittableCopyTypes.Contains(type);
                         typeGenInfos.Add(typeGenInfo);
                         string filePath = saveTo + typeGenInfo.WrapClassName + ".cs";
+
+                        int uniqueId = 1;
+                        while (makeFileUniqueMap.ContainsKey(filePath.ToLower())) {
+                            filePath = saveTo + typeGenInfo.WrapClassName + "_" + uniqueId + ".cs";
+                            uniqueId++;
+                        }
+                        makeFileUniqueMap.Add(filePath.ToLower(), true);
+
                         string fileContext = wrapRender(typeGenInfo);
                         using (StreamWriter textWriter = new StreamWriter(filePath, false, Encoding.UTF8))
                         {

@@ -9,7 +9,7 @@
 #include <cstring>
 #include "V8Utils.h"
 
-#define LIB_VERSION 8
+#define LIB_VERSION 11
 
 using puerts::JSEngine;
 using puerts::FValue;
@@ -30,8 +30,18 @@ V8_EXPORT int GetLibVersion()
 
 V8_EXPORT v8::Isolate *CreateJSEngine()
 {
-    auto JsEngine = new JSEngine();
+    auto JsEngine = new JSEngine(nullptr, nullptr);
     return JsEngine->MainIsolate;
+}
+
+V8_EXPORT v8::Isolate *CreateJSEngineWithExternalEnv(void* external_quickjs_runtime, void* external_quickjs_context)
+{
+#if WITH_QUICKJS
+    auto JsEngine = new JSEngine(external_quickjs_runtime, external_quickjs_context);
+    return JsEngine->MainIsolate;
+#else
+    return nullptr;
+#endif
 }
 
 V8_EXPORT void DestroyJSEngine(v8::Isolate *Isolate)
@@ -335,7 +345,7 @@ V8_EXPORT void SetArrayBufferToOutValue(v8::Isolate* Isolate, v8::Value *Value, 
     {
         auto Context = Isolate->GetCurrentContext();
         auto Outer = Value->ToObject(Context).ToLocalChecked();
-        v8::Local<v8::ArrayBuffer> Ab = puerts::NewArrayBuffer(Isolate, Bytes, Length, true);
+        v8::Local<v8::ArrayBuffer> Ab = puerts::NewArrayBuffer(Isolate, Bytes, Length);
         auto ReturnVal = Outer->Set(Context, FV8Utils::V8String(Isolate, "value"), Ab);
     }
 }
@@ -425,12 +435,38 @@ V8_EXPORT JSFunction *GetFunctionFromValue(v8::Isolate* Isolate, v8::Value *Valu
     }
 }
 
+V8_EXPORT puerts::JSObject *GetJSObjectFromValue(v8::Isolate* Isolate, v8::Value *Value, int IsOut)
+{
+    if (IsOut)
+    {
+        auto Context = Isolate->GetCurrentContext();
+        auto Outer = Value->ToObject(Context).ToLocalChecked();
+        auto Realvalue = Outer->Get(Context, FV8Utils::V8String(Isolate, "value")).ToLocalChecked();
+        return GetJSObjectFromValue(Isolate, *Realvalue, false);
+    }
+    else
+    {
+        auto Context = Isolate->GetCurrentContext();
+        auto JSObject = v8::Local<v8::Object>::Cast(Value->ToObject(Context).ToLocalChecked());
+        auto JsEngine = FV8Utils::IsolateData<JSEngine>(Isolate);
+        return JsEngine->CreateJSObject(Isolate, Context, JSObject);
+    }
+}
+
 V8_EXPORT void ReleaseJSFunction(v8::Isolate* Isolate, JSFunction *Function)
 {
     if (Isolate && Function)
     {
         auto JsEngine = FV8Utils::IsolateData<JSEngine>(Isolate);
         JsEngine->ReleaseJSFunction(Function);
+    }
+}
+V8_EXPORT void ReleaseJSObject(v8::Isolate* Isolate, puerts::JSObject *Object)
+{
+    if (Isolate && Object)
+    {
+        auto JsEngine = FV8Utils::IsolateData<JSEngine>(Isolate);
+        JsEngine->ReleaseJSObject(Object);
     }
 }
 
@@ -468,7 +504,7 @@ V8_EXPORT void ReturnBigInt(v8::Isolate* Isolate, const v8::FunctionCallbackInfo
 
 V8_EXPORT void ReturnArrayBuffer(v8::Isolate* Isolate, const v8::FunctionCallbackInfo<v8::Value>& Info, unsigned char *Bytes, int Length)
 {
-    Info.GetReturnValue().Set(puerts::NewArrayBuffer(Isolate, Bytes, Length, true));
+    Info.GetReturnValue().Set(puerts::NewArrayBuffer(Isolate, Bytes, Length));
 }
 
 V8_EXPORT void ReturnBoolean(v8::Isolate* Isolate, const v8::FunctionCallbackInfo<v8::Value>& Info, int Bool)
@@ -486,10 +522,15 @@ V8_EXPORT void ReturnNull(v8::Isolate* Isolate, const v8::FunctionCallbackInfo<v
     Info.GetReturnValue().SetNull();
 }
 
-//V8_EXPORT void ReturnFunction(v8::Isolate* Isolate, v8::Local<v8::Context>& Context, const v8::FunctionCallbackInfo<v8::Value>& Info, JSFunction *Function)
-//{
-//    Info.GetReturnValue().Set(Function->GFunction.Get(Isolate));
-//}
+V8_EXPORT void ReturnFunction(v8::Isolate* Isolate, const v8::FunctionCallbackInfo<v8::Value>& Info, JSFunction *Function)
+{
+   Info.GetReturnValue().Set(Function->GFunction.Get(Isolate));
+}
+
+V8_EXPORT void ReturnJSObject(v8::Isolate* Isolate, const v8::FunctionCallbackInfo<v8::Value>& Info, puerts::JSObject *Object)
+{
+   Info.GetReturnValue().Set(Object->GObject.Get(Isolate));
+}
 
 //-------------------------- end js call cs --------------------------
 
@@ -499,7 +540,7 @@ V8_EXPORT void PushNullForJSFunction(JSFunction *Function)
 {
     FValue Value;
     Value.Type = puerts::NullOrUndefined;
-    Function->Arguments.push_back(Value);
+    Function->Arguments.push_back(std::move(Value));
 }
 
 V8_EXPORT void PushDateForJSFunction(JSFunction *Function, double DateValue)
@@ -507,7 +548,7 @@ V8_EXPORT void PushDateForJSFunction(JSFunction *Function, double DateValue)
     FValue Value;
     Value.Type = puerts::Date;
     Value.Number = DateValue;
-    Function->Arguments.push_back(Value);
+    Function->Arguments.push_back(std::move(Value));
 }
 
 V8_EXPORT void PushBooleanForJSFunction(JSFunction *Function, int B)
@@ -515,7 +556,7 @@ V8_EXPORT void PushBooleanForJSFunction(JSFunction *Function, int B)
     FValue Value;
     Value.Type = puerts::Boolean;
     Value.Boolean = B;
-    Function->Arguments.push_back(Value);
+    Function->Arguments.push_back(std::move(Value));
 }
 
 V8_EXPORT void PushBigIntForJSFunction(JSFunction *Function, int64_t V)
@@ -523,17 +564,20 @@ V8_EXPORT void PushBigIntForJSFunction(JSFunction *Function, int64_t V)
     FValue Value;
     Value.Type = puerts::BigInt;
     Value.BigInt = V;
-    Function->Arguments.push_back(Value);
+    Function->Arguments.push_back(std::move(Value));
 }
 
 V8_EXPORT void PushArrayBufferForJSFunction(JSFunction *Function, unsigned char * Bytes, int Length)
 {
+    auto Isolate = Function->ResultInfo.Isolate;
+    v8::Isolate::Scope IsolateScope(Isolate);
+    v8::HandleScope HandleScope(Isolate);
+    v8::Local<v8::Context> Context = Function->ResultInfo.Context.Get(Isolate);
+    v8::Context::Scope ContextScope(Context);
     FValue Value;
     Value.Type = puerts::ArrayBuffer;
-    Value.ArrayBuffer.Length = Length;
-    Value.ArrayBuffer.Bytes = static_cast<unsigned char *>(::malloc(Length));
-    ::memcpy(Value.ArrayBuffer.Bytes, Bytes, Length);
-    Function->Arguments.push_back(Value);
+    Value.ArrayBuffer.Reset(Isolate, puerts::NewArrayBuffer(Isolate, Bytes, Length));
+    Function->Arguments.push_back(std::move(Value));
 }
 
 V8_EXPORT void PushStringForJSFunction(JSFunction *Function, const char* S)
@@ -541,7 +585,7 @@ V8_EXPORT void PushStringForJSFunction(JSFunction *Function, const char* S)
     FValue Value;
     Value.Type = puerts::String;
     Value.Str = S;
-    Function->Arguments.push_back(Value);
+    Function->Arguments.push_back(std::move(Value));
 }
 
 V8_EXPORT void PushNumberForJSFunction(JSFunction *Function, double D)
@@ -549,7 +593,7 @@ V8_EXPORT void PushNumberForJSFunction(JSFunction *Function, double D)
     FValue Value;
     Value.Type = puerts::Number;
     Value.Number = D;
-    Function->Arguments.push_back(Value);
+    Function->Arguments.push_back(std::move(Value));
 }
 
 V8_EXPORT void PushObjectForJSFunction(JSFunction *Function, int ClassID, void* Ptr)
@@ -558,16 +602,24 @@ V8_EXPORT void PushObjectForJSFunction(JSFunction *Function, int ClassID, void* 
     Value.Type = puerts::NativeObject;
     Value.ObjectInfo.ClassID = ClassID;
     Value.ObjectInfo.ObjectPtr = Ptr;
-    Function->Arguments.push_back(Value);
+    Function->Arguments.push_back(std::move(Value));
 }
 
-//V8_EXPORT void PushJSFunctionForJSFunction(JSFunction *F, JSFunction *V)
-//{
-//    FValue Value;
-//    Value.Type = Function;
-//    Value.FunctionPtr = V;
-//    F->Arguments.push_back(Value);
-//}
+V8_EXPORT void PushJSFunctionForJSFunction(JSFunction *F, JSFunction *V)
+{
+   FValue Value;
+   Value.Type = puerts::Function;
+   Value.FunctionPtr = V;
+   F->Arguments.push_back(std::move(Value));
+}
+
+V8_EXPORT void PushJSObjectForJSFunction(JSFunction *F, puerts::JSObject *V)
+{
+   FValue Value;
+   Value.Type = puerts::JsObject;
+   Value.JSObjectPtr = V;
+   F->Arguments.push_back(std::move(Value));
+}
 
 V8_EXPORT FResultInfo *InvokeJSFunction(JSFunction *Function, int HasResult)
 {
@@ -731,6 +783,20 @@ V8_EXPORT int GetTypeIdFromResult(FResultInfo *ResultInfo)
 
     auto LifeCycleInfo = static_cast<FLifeCycleInfo *>(FV8Utils::GetPoninter(Context, Result, 1));
     return LifeCycleInfo ? LifeCycleInfo->ClassID : -1;
+}
+
+V8_EXPORT puerts::JSObject *GetJSObjectFromResult(FResultInfo *ResultInfo)
+{
+    v8::Isolate* Isolate = ResultInfo->Isolate;
+    v8::Isolate::Scope IsolateScope(Isolate);
+    v8::HandleScope HandleScope(Isolate);
+    v8::Local<v8::Context> Context = ResultInfo->Context.Get(Isolate);
+    v8::Context::Scope ContextScope(Context);
+    auto Result = ResultInfo->Result.Get(Isolate);
+
+    auto V8Object = v8::Local<v8::Object>::Cast(Result->ToObject(Context).ToLocalChecked());
+    auto JsEngine = FV8Utils::IsolateData<JSEngine>(Isolate);
+    return JsEngine->CreateJSObject(Isolate, Context, V8Object);
 }
 
 V8_EXPORT JSFunction *GetFunctionFromResult(FResultInfo *ResultInfo)

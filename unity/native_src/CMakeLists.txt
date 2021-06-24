@@ -4,14 +4,8 @@
 # http://opensource.org/licenses/MIT
 # Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
 
-cmake_minimum_required(VERSION 2.8)
-
-if ( WIN32 AND NOT CYGWIN AND NOT ( CMAKE_SYSTEM_NAME STREQUAL "WindowsStore" ) AND NOT ANDROID)
-	set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} /MT" CACHE STRING "")
-	set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} /MTd" CACHE STRING "")
-	set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MT" CACHE STRING "")
-	set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MTd" CACHE STRING "")
-endif ()
+cmake_minimum_required(VERSION 3.15)
+cmake_policy(SET CMP0091 NEW)
 
 project(PuertsPlugin)
 
@@ -31,7 +25,14 @@ find_path(PUERTS_PROJECT_DIR NAMES SConstruct
 
 MARK_AS_ADVANCED(PUERTS_PROJECT_DIR)
 
-set(V8_ENGINE ${CMAKE_SOURCE_DIR}/v8)
+if ( JS_ENGINE STREQUAL "quickjs")
+    set(LIB_FILE_NAME libquickjs.a)
+else()
+    set(JS_ENGINE v8)
+    set(LIB_FILE_NAME libwee8.a)
+endif()
+
+set(V8_ENGINE ${CMAKE_SOURCE_DIR}/${JS_ENGINE})
 
 set(V8_INC ${V8_ENGINE}/Inc)
 
@@ -85,45 +86,88 @@ endmacro(source_group_by_dir)
 source_group_by_dir(${CMAKE_CURRENT_SOURCE_DIR} PUERTS_INC)
 source_group_by_dir(${CMAKE_CURRENT_SOURCE_DIR} PUERTS_SRC)
 
-if (APPLE)
-    if (IOS)
+if ( APPLE )
+    if ( IOS)
         set(CMAKE_OSX_ARCHITECTURES "$(ARCHS_STANDARD)")
         add_library(puerts STATIC
            ${PUERTS_SRC} ${PUERTS_INC}
         )
 		set_xcode_property (puerts IPHONEOS_DEPLOYMENT_TARGET "7.0" "all")
     else ()
-        set(CMAKE_OSX_ARCHITECTURES "$(ARCHS_STANDARD_64_BIT)")
-        add_library(puerts MODULE
-            ${PUERTS_SRC} ${PUERTS_INC}
-        )
-        set_target_properties ( puerts PROPERTIES BUNDLE TRUE )
+        # set(CMAKE_OSX_ARCHITECTURES "$(ARCHS_STANDARD_64_BIT)")
+        # 某些mac机器上会默认开始编译arm64版本，暂时先写死x86版本，后续再支持arm64
+        set(CMAKE_OSX_ARCHITECTURES x86_64)
+
+        if ( FOR_UT STREQUAL "1")
+            add_library(puerts SHARED
+                ${PUERTS_SRC} ${PUERTS_INC}
+            )
+        else ()
+            add_library(puerts MODULE
+                ${PUERTS_SRC} ${PUERTS_INC}
+            )
+            set_target_properties ( puerts PROPERTIES BUNDLE TRUE )
+        endif ()
     endif ()
-else ( )
+else ()
     add_library(puerts SHARED
         ${PUERTS_SRC} ${PUERTS_INC}
     )
-endif ( )
+endif ()
 
 if ( WIN32 AND NOT CYGWIN )
     target_compile_definitions (puerts PRIVATE BUILDING_V8_SHARED)
-endif ( )
+endif ()
 
-if ( WIN32 )
+if ( JS_ENGINE STREQUAL "quickjs")
+    target_compile_definitions (puerts PRIVATE WITHOUT_INSPECTOR)
+    target_compile_definitions (puerts PRIVATE WITH_QUICKJS)
+endif ()
+
+if ( MSYS )
     if("${CMAKE_SIZEOF_VOID_P}" STREQUAL "4")
         target_link_libraries(puerts
-            ${V8_ENGINE}/Lib/Win32/wee8.lib
-            winmm.lib
-            dbghelp.lib
-            shlwapi.lib
+            ${V8_ENGINE}/Lib/Win32/${LIB_FILE_NAME}
         )
     else ()
         target_link_libraries(puerts
-            ${V8_ENGINE}/Lib/Win64/wee8.lib
-            winmm.lib
-            dbghelp.lib
-            shlwapi.lib
+            ${V8_ENGINE}/Lib/Win64/${LIB_FILE_NAME}
         )
+    endif ()
+    target_compile_definitions (puerts PRIVATE PLATFORM_WINDOWS)
+elseif ( WIN32 )
+    if ( JS_ENGINE STREQUAL "quickjs")
+        if("${CMAKE_SIZEOF_VOID_P}" STREQUAL "4")
+            target_link_libraries(puerts
+                ${V8_ENGINE}/Lib/Win32/quickjs.dll.lib
+                winmm.lib
+                dbghelp.lib
+                shlwapi.lib
+            )
+        else ()
+            target_link_libraries(puerts
+                ${V8_ENGINE}/Lib/Win64/quickjs.dll.lib
+                winmm.lib
+                dbghelp.lib
+                shlwapi.lib
+            )
+        endif ()
+    else ()
+        if("${CMAKE_SIZEOF_VOID_P}" STREQUAL "4")
+            target_link_libraries(puerts
+                ${V8_ENGINE}/Lib/Win32/wee8.lib
+                winmm.lib
+                dbghelp.lib
+                shlwapi.lib
+            )
+        else ()
+            target_link_libraries(puerts
+                ${V8_ENGINE}/Lib/Win64/wee8.lib
+                winmm.lib
+                dbghelp.lib
+                shlwapi.lib
+            )
+        endif ()
     endif ()
     target_compile_definitions (puerts PRIVATE PLATFORM_WINDOWS)
 elseif ( ANDROID )
@@ -131,17 +175,17 @@ elseif ( ANDROID )
 
     if( ANDROID_ABI STREQUAL "armeabi-v7a")
         target_link_libraries(puerts
-            ${V8_ENGINE}/Lib/Android/armv7/libwee8.a
+            ${V8_ENGINE}/Lib/Android/armeabi-v7a/${LIB_FILE_NAME}
             ${log-lib}
         )
         target_compile_definitions (puerts PRIVATE PLATFORM_ANDROID_ARM)
-    else ( )
+    else ()
         target_link_libraries(puerts
-            ${V8_ENGINE}/Lib/Android/arm64/libwee8.a
+            ${V8_ENGINE}/Lib/Android/arm64-v8a/${LIB_FILE_NAME}
             ${log-lib}
         )
         target_compile_definitions (puerts PRIVATE PLATFORM_ANDROID_ARM64)
-    endif ( )
+    endif ()
 
     #set_target_properties( puerts PROPERTIES LINK_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/android_version.script)
     #set (CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,--gc-sections -Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/android_version.script")
@@ -151,12 +195,22 @@ elseif ( ANDROID )
             "${CMAKE_BINARY_DIR}/libpuerts.so"
             COMMENT "Strip debug symbols done on final binary.")
 elseif ( APPLE )
-    if (IOS)
-        target_compile_definitions (puerts PRIVATE PLATFORM_IOS)
+    if ( IOS )
+        if(PLATFORM STREQUAL "SIMULATOR64")
+            target_compile_definitions (puerts PRIVATE PLATFORM_IOS_SIMULATOR)
+            message(STATUS "SIMULATOR64 BUILD...")
+        else ()
+            target_compile_definitions (puerts PRIVATE PLATFORM_IOS)
+        endif ()
     else ()
         target_link_libraries(puerts
-            ${V8_ENGINE}/Lib/macOS/libwee8.a
+            ${V8_ENGINE}/Lib/macOS/${LIB_FILE_NAME}
         )
         target_compile_definitions (puerts PRIVATE PLATFORM_MAC)
-    endif ( )
-endif ( )
+    endif ()
+endif ()
+
+if ( WIN32 AND NOT CYGWIN AND NOT ( CMAKE_SYSTEM_NAME STREQUAL "WindowsStore" ) AND NOT ANDROID AND NOT MSYS)
+	set_property(TARGET puerts PROPERTY
+             MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+endif ()

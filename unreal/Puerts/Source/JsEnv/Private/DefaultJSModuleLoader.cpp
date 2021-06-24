@@ -8,7 +8,7 @@
 #include "JSModuleLoader.h"
 #include "Misc/Paths.h"
 #include "Misc/FileHelper.h"
-#include "HAL/PlatformFileManager.h"
+#include "Engine.h"
 #include "Algo/Reverse.h"
 
 namespace puerts
@@ -19,6 +19,7 @@ namespace puerts
         PathIn.ParseIntoArray(PathFrags, TEXT("/"));
         Algo::Reverse(PathFrags);
         TArray<FString> NewPathFrags;
+        bool FromRoot = PathIn.StartsWith(TEXT("/"));
         while (PathFrags.Num() > 0) {
             FString E = PathFrags.Pop();
             if (E != TEXT("") && E != TEXT(".")) 
@@ -31,7 +32,14 @@ namespace puerts
                 }
             }
         }
-        return FString::Join(NewPathFrags, TEXT("/"));
+        if (FromRoot)
+        {
+            return TEXT("/") + FString::Join(NewPathFrags, TEXT("/"));
+        }
+        else
+        {
+            return FString::Join(NewPathFrags, TEXT("/"));
+        }
     }
 
 	bool DefaultJSModuleLoader::CheckExists(const FString& PathIn, FString& Path, FString& AbsolutePath)
@@ -41,16 +49,7 @@ namespace puerts
 		if (PlatformFile.FileExists(*NormalizedPath))
 		{
             AbsolutePath = IFileManager::Get().ConvertToAbsolutePathForExternalAppForRead(*NormalizedPath);
-#if PLATFORM_WINDOWS
-			auto PathInWin = AbsolutePath.Replace(TEXT("/"), TEXT("\\"));
-			if (PathInWin.Len() && PathInWin[1] == ':')
-			{
-				PathInWin = PathInWin.Mid(0, 1).ToLower() + PathInWin.Mid(1);
-			}
-#endif
-            
             Path = NormalizedPath;
-            
             return true;
 		}
 

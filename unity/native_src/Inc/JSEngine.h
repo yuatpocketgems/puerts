@@ -38,6 +38,8 @@
 #include "Blob/macOS/SnapshotBlob.h"
 #elif defined(PLATFORM_IOS)
 #include "Blob/iOS/arm64/SnapshotBlob.h"
+#elif defined(PLATFORM_IOS_SIMULATOR)
+#include "Blob/iOS/x64/SnapshotBlob.h"
 #endif
 
 typedef void(*CSharpFunctionCallback)(v8::Isolate* Isolate, const v8::FunctionCallbackInfo<v8::Value>& Info, void* Self, int ParamLen, int64_t UserData);
@@ -69,12 +71,12 @@ struct FLifeCycleInfo
 
 static std::unique_ptr<v8::Platform> GPlatform;
 
-v8::Local<v8::ArrayBuffer> NewArrayBuffer(v8::Isolate* Isolate, void *Ptr, size_t Size, bool Copy);
+v8::Local<v8::ArrayBuffer> NewArrayBuffer(v8::Isolate* Isolate, void *Ptr, size_t Size);
 
 class JSEngine
 {
 public:
-    JSEngine();
+    JSEngine(void* external_quickjs_runtime, void* external_quickjs_context);
 
     ~JSEngine();
 
@@ -105,6 +107,10 @@ public:
     JSFunction* CreateJSFunction(v8::Isolate* InIsolate, v8::Local<v8::Context> InContext, v8::Local<v8::Function> InFunction);
 
     void ReleaseJSFunction(JSFunction* InFunction);
+
+    JSObject* CreateJSObject(v8::Isolate* InIsolate, v8::Local<v8::Context> InContext, v8::Local<v8::Object> InObject);
+
+    void ReleaseJSObject(JSObject* InObject);
 
     void CreateInspector(int32_t Port);
 
@@ -138,9 +144,19 @@ private:
 
     std::map<void*, v8::UniquePersistent<v8::Value>> ObjectMap;
 
-    std::set<JSFunction*> JSFunctions;
+    // 把已生成的JSFunction存起来，让重复的JSFunction传进来的时候可以复用
+    std::vector<JSFunction*> JSFunctions;
+
+    // 记录js对象到id的映射
+    v8::UniquePersistent<v8::Map> JSObjectIdMap;
+    // id到c++ jsobject对象的映射
+    std::map<int32_t, JSObject*> JSObjectMap;
+    // 从map里删除元素后，会产生一些空余的id，下次创建时从此处取出使用
+    std::vector<int32_t> ObjectMapFreeIndex;
 
     std::mutex JSFunctionsMutex;
+
+    std::mutex JSObjectsMutex;
 
     V8Inspector* Inspector;
 
