@@ -54,19 +54,32 @@ var global = global || (function () { return this; }());
         sid = (typeof sid == 'undefined') ? 0 : sid;
         let fullPathInJs = fullPath.replace(/\\/g, '\\\\');
         let fullDirInJs = (fullPath.indexOf('/') != -1) ? fullPath.substring(0, fullPath.lastIndexOf("/")) : fullPath.substring(0, fullPath.lastIndexOf("\\")).replace(/\\/g, '\\\\');
-        let executeScript = "(function() { var __filename = '"
-            + fullPathInJs + "', __dirname = '"
-            + fullDirInJs + "', module = puerts.getModuleBySID(" + sid + "), exports = module.exports; module.filename = __filename ; (function (exports, require, console, prompt) { "
-            + script + "\n})(exports, puerts.genRequire('"
-            + fullDirInJs + "'), puerts.console); return module.exports})()";
-        return evalScript(executeScript, debugPath);
+        let exports = {};
+        let module = puerts.getModuleBySID(sid);
+        module.exports = exports;
+        let wrapped = evalScript(
+            // Wrap the script in the same way NodeJS does it. It is important since IDEs (VSCode) will use this wrapper pattern
+            // to enable stepping through original source in-place.
+            "(function (exports, require, module, __filename, __dirname) { " + script + "\n});", 
+            debugPath
+        )
+        wrapped(exports, puerts.genRequire(fullDirInJs), module, fullPathInJs, fullDirInJs)
+        return module.exports;
     }
     
     function genRequire(requiringDir) {
         let localModuleCache = Object.create(null);
         function require(moduleName) {
             moduleName = normalize(moduleName);
-            if (moduleName in localModuleCache) return localModuleCache[moduleName].exports;
+            let forceReload = false;
+            if ((moduleName in localModuleCache)) {
+                let m = localModuleCache[moduleName];
+                if (!m.__forceReload) {
+                    return localModuleCache[moduleName].exports;
+                } else {
+                    forceReload = true;
+                }
+            }
             if (moduleName in buildinModule) return buildinModule[moduleName];
             let nativeModule = findModule(moduleName);
             if (nativeModule) {
@@ -80,7 +93,7 @@ var global = global || (function () { return this; }());
             let debugPath = moduleInfo.substring(split + 1, split2);
             let script = moduleInfo.substring(split2 + 1);
             let key = fullPath;
-            if (key in moduleCache) {
+            if ((key in moduleCache) && !forceReload) {
                 localModuleCache[moduleName] = moduleCache[key];
                 return localModuleCache[moduleName].exports;
             }
@@ -88,13 +101,19 @@ var global = global || (function () { return this; }());
             localModuleCache[moduleName] = m;
             moduleCache[key] = m;
             let sid = addModule(m);
-            if (fullPath.endsWith("package.json")) {
+            if (fullPath.endsWith(".json")) {
                 let packageConfigure = JSON.parse(script);
-                let fullDirInJs = (fullPath.indexOf('/') != -1) ? fullPath.substring(0, fullPath.lastIndexOf("/")) : fullPath.substring(0, fullPath.lastIndexOf("\\")).replace(/\\/g, '\\\\');
-                let tmpRequire = genRequire(fullDirInJs);
-                let r = tmpRequire(packageConfigure.main);
-                tmpModuleStorage[sid] = undefined;
-                m.exports = r;
+                
+                if (fullPath.endsWith("package.json") && packageConfigure.main) {
+                    let fullDirInJs = (fullPath.indexOf('/') != -1) ? fullPath.substring(0, fullPath.lastIndexOf("/")) : fullPath.substring(0, fullPath.lastIndexOf("\\")).replace(/\\/g, '\\\\');
+                    let tmpRequire = genRequire(fullDirInJs);
+                    let r = tmpRequire(packageConfigure.main);
+                    tmpModuleStorage[sid] = undefined;
+                    m.exports = r;
+                } else {
+                    tmpModuleStorage[sid] = undefined;
+                    m.exports = packageConfigure;
+                }
             } else {
                 executeModule(fullPath, script, debugPath, sid);
                 tmpModuleStorage[sid] = undefined;
@@ -109,13 +128,43 @@ var global = global || (function () { return this; }());
         buildinModule[name] = module;
     }
     
+    function forceReload(reloadModuleKey) {
+        if (reloadModuleKey) {
+            reloadModuleKey = normalize(reloadModuleKey);
+        }
+        let reloaded = false;
+        for(var moduleKey in moduleCache) {
+            if (!reloadModuleKey || (reloadModuleKey == moduleKey)) {
+                moduleCache[moduleKey].__forceReload = true;
+                reloaded = true;
+                if (reloadModuleKey) break;
+            }
+        }
+        if (!reloaded && reloadModuleKey) {
+            console.warn(`reload not loaded module: ${reloadModuleKey}!`);
+        }
+    }
+    
+    function getModuleByUrl(url) {
+        if (url) {
+            url = normalize(url);
+            return moduleCache[url];
+        }
+    }
+    
     registerBuildinModule("puerts", puerts)
 
     puerts.genRequire = genRequire;
+    
+    puerts.__require = genRequire("");
     
     puerts.getModuleBySID = getModuleBySID;
     
     puerts.registerBuildinModule = registerBuildinModule;
 
     puerts.loadModule = loadModule;
+    
+    puerts.forceReload = forceReload;
+    
+    puerts.getModuleByUrl = getModuleByUrl;
 }(global));

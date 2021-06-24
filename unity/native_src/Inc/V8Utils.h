@@ -68,7 +68,8 @@ public:
         v8::Isolate::Scope IsolateScope(Isolate);
         v8::HandleScope HandleScope(Isolate);
         v8::String::Utf8Value Exception(Isolate, TryCatch.Exception());
-        std::string ExceptionStr(*Exception);
+        const char * StrException = *Exception;
+        std::string ExceptionStr(StrException == nullptr ? "" : StrException);
         v8::Local<v8::Message> Message = TryCatch.Message();
         if (Message.IsEmpty())
         {
@@ -83,26 +84,10 @@ public:
             std::ostringstream stm;
             v8::String::Utf8Value FileName(Isolate, Message->GetScriptResourceName());
             int LineNum = Message->GetLineNumber(Context).FromJust();
-            stm << *FileName << ":" << LineNum << ": " << ExceptionStr;
+            const char * StrFileName = *FileName;
+            stm << (StrFileName == nullptr ? "unknow file" : StrFileName) << ":" << LineNum << ": " << ExceptionStr;
 
             stm << std::endl;
-
-            // 输出错误的一行源码
-            v8::String::Utf8Value SourceLine(Isolate, Message->GetSourceLine(Context).ToLocalChecked());
-            stm << *SourceLine << std::endl;
-
-            // 输出波浪下划线
-            std::string WavyUnderlineStr;
-            int Start = Message->GetStartColumn();
-            for (int Index = 0; Index < Start; Index++) {
-                WavyUnderlineStr = WavyUnderlineStr.append(" ");
-            }
-            int End = Message->GetEndColumn();
-            for (int Index = Start; Index < End; Index++) {
-                WavyUnderlineStr = WavyUnderlineStr.append("^");
-            }
-
-            stm << WavyUnderlineStr;
 
             // 输出调用栈信息
             v8::Local<v8::Value> StackTrace;

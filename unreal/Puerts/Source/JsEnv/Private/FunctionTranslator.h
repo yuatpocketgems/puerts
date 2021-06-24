@@ -27,13 +27,19 @@ class FFunctionTranslator
 public:
     explicit FFunctionTranslator(UFunction *InFunction);
 
-    virtual ~FFunctionTranslator() {}
+    virtual ~FFunctionTranslator()
+    {
+        if (ArgumentDefaultValues)
+        {
+            FMemory::Free(ArgumentDefaultValues);
+        }
+    }
 
     virtual v8::Local<v8::FunctionTemplate> ToFunctionTemplate(v8::Isolate* Isolate);
 
     void CallJs(v8::Isolate* Isolate, v8::Local<v8::Context>& Context, v8::Local<v8::Function> JsFunction, v8::Local<v8::Value> This, void *Params);
 
-    void CallJs(v8::Isolate* Isolate, v8::Local<v8::Context>& Context, v8::Local<v8::Function> JsFunction, v8::Local<v8::Value> This, FFrame &Stack, void *RESULT_PARAM);
+    void CallJs(v8::Isolate* Isolate, v8::Local<v8::Context>& Context, v8::Local<v8::Function> JsFunction, v8::Local<v8::Value> This, UObject *ContextObject, FFrame &Stack, void *RESULT_PARAM);
 
     void Call(v8::Isolate* Isolate, v8::Local<v8::Context>& Context, const v8::FunctionCallbackInfo<v8::Value>& Info, std::function<void(void *)> OnCall);
 
@@ -49,6 +55,10 @@ protected:
     UObject *BindObject;
 
     uint32 ParamsBufferSize;
+
+    void *ArgumentDefaultValues;
+
+    std::vector< v8::Local<v8::Value>> Args;
 
 private:
     static void Call(const v8::FunctionCallbackInfo<v8::Value>& Info);

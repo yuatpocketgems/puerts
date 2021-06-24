@@ -24,11 +24,15 @@ namespace puerts
 enum ArgType
 {
     Int32,
+    Number,
     String,
     External,
     Function,
     Object
 };
+
+#define RELEASED_UOBJECT ((UObject*)12)
+#define RELEASED_UOBJECT_MEMBER ((void*)12)
 
 class FV8Utils
 {
@@ -85,13 +89,18 @@ public:
     FORCEINLINE static UObject * GetUObject(v8::Local<v8::Context>& Context, v8::Local<v8::Value> Value, int Index = 0)
     {
         auto UEObject = reinterpret_cast<UObject*>(GetPoninter(Context, Value, Index));
-        return (UEObject && UEObject->IsValidLowLevelFast() && !UEObject->IsPendingKill()) ? UEObject : nullptr;
+        return (!UEObject || (UEObject != RELEASED_UOBJECT && UEObject->IsValidLowLevelFast() && !UEObject->IsPendingKill())) ? UEObject : RELEASED_UOBJECT;
     }
 
     FORCEINLINE static UObject * GetUObject(v8::Local<v8::Object> Object, int Index = 0)
     {
         auto UEObject = reinterpret_cast<UObject*>(GetPoninter(Object, Index));
-        return (UEObject && UEObject->IsValidLowLevelFast() && !UEObject->IsPendingKill()) ? UEObject : nullptr;
+        return (!UEObject || (UEObject != RELEASED_UOBJECT && UEObject->IsValidLowLevelFast() && !UEObject->IsPendingKill())) ? UEObject : RELEASED_UOBJECT;
+    }
+
+    FORCEINLINE static bool IsReleasedPtr(void *Ptr)
+    {
+        return RELEASED_UOBJECT_MEMBER == Ptr;
     }
 
     FORCEINLINE static v8::Local<v8::String> InternalString(v8::Isolate* Isolate, const FString& String)
@@ -106,11 +115,7 @@ public:
 
     FORCEINLINE static FString ToFString(v8::Isolate* Isolate, v8::Local<v8::Value> Value)
     {
-#if ENGINE_MINOR_VERSION >= 24
-        return reinterpret_cast<TCHAR*>(*(v8::String::Value(Isolate, Value)));
-#else
         return UTF8_TO_TCHAR(*(v8::String::Utf8Value(Isolate, Value)));
-#endif
             
     }
 
@@ -132,13 +137,8 @@ public:
 
     FORCEINLINE static v8::Local<v8::String> ToV8String(v8::Isolate* Isolate, const TCHAR *String)
     {
-#if ENGINE_MINOR_VERSION >= 24
-        return v8::String::NewFromTwoByte(Isolate, (const uint16_t *)String,
-            v8::NewStringType::kNormal).ToLocalChecked();
-#else
         return v8::String::NewFromUtf8(Isolate, TCHAR_TO_UTF8(String),
             v8::NewStringType::kNormal).ToLocalChecked();
-#endif
             
     }
 
@@ -178,6 +178,16 @@ public:
             {
             case Int32:
                 if (!Info[i]->IsInt32())
+                {
+                    ThrowException(Info.GetIsolate(), FString::Printf(TEXT("Bad parameters #%d, expect a int32."), i));
+                    return false;
+                }
+                else
+                {
+                    break;
+                }
+            case Number:
+                if (!Info[i]->IsNumber())
                 {
                     ThrowException(Info.GetIsolate(), FString::Printf(TEXT("Bad parameters #%d, expect a int32."), i));
                     return false;

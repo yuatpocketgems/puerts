@@ -13,12 +13,11 @@
 
 namespace puerts
 {
-    v8::Local<v8::ArrayBuffer> NewArrayBuffer(v8::Isolate* Isolate, void *Ptr, size_t Size, bool Copy)
+    v8::Local<v8::ArrayBuffer> NewArrayBuffer(v8::Isolate* Isolate, void *Ptr, size_t Size)
     {
         v8::Local<v8::ArrayBuffer> Ab = v8::ArrayBuffer::New(Isolate, Size);
         void* Buff = Ab->GetContents().Data();
         ::memcpy(Buff, Ptr, Size);
-        if (!Copy) ::free(Ptr);
         return Ab;
     }
 
@@ -52,7 +51,7 @@ namespace puerts
         Info.GetReturnValue().Set(Result.ToLocalChecked());
     }
 
-    JSEngine::JSEngine()
+    JSEngine::JSEngine(void* external_quickjs_runtime, void* external_quickjs_context)
     {
         GeneralDestructor = nullptr;
         Inspector = nullptr;
@@ -67,11 +66,6 @@ namespace puerts
         v8::V8::SetFlagsFromString(Flags.c_str(), static_cast<int>(Flags.size()));
 #endif
 
-#if PLATFORM_ANDROID
-        std::string Flags = "--trace-gc-object-stats";
-        v8::V8::SetFlagsFromString(Flags.c_str(), static_cast<int>(Flags.size()));
-#endif
-
         v8::StartupData SnapshotBlob;
         SnapshotBlob.data = (const char *)SnapshotBlobCode;
         SnapshotBlob.raw_size = sizeof(SnapshotBlobCode);
@@ -79,7 +73,11 @@ namespace puerts
 
         // 初始化Isolate和DefaultContext
         CreateParams.array_buffer_allocator = v8::ArrayBuffer::Allocator::NewDefaultAllocator();
+#if WITH_QUICKJS
+        MainIsolate = (external_quickjs_runtime == nullptr) ? v8::Isolate::New(CreateParams) : v8::Isolate::New(external_quickjs_runtime);
+#else
         MainIsolate = v8::Isolate::New(CreateParams);
+#endif
         auto Isolate = MainIsolate;
         ResultInfo.Isolate = MainIsolate;
         Isolate->SetData(0, this);
@@ -87,7 +85,12 @@ namespace puerts
         v8::Isolate::Scope Isolatescope(Isolate);
         v8::HandleScope HandleScope(Isolate);
 
+#if WITH_QUICKJS
+        v8::Local<v8::Context> Context = (external_quickjs_runtime && external_quickjs_context) ? v8::Context::New(Isolate, external_quickjs_context) : v8::Context::New(Isolate);
+#else
         v8::Local<v8::Context> Context = v8::Context::New(Isolate);
+#endif
+        v8::Context::Scope ContextScope(Context);
         ResultInfo.Context.Reset(Isolate, Context);
         v8::Local<v8::Object> Global = Context->Global();
 
@@ -95,6 +98,8 @@ namespace puerts
 
         Isolate->SetPromiseRejectCallback(&PromiseRejectCallback<JSEngine>);
         Global->Set(Context, FV8Utils::V8String(Isolate, "__tgjsSetPromiseRejectCallback"), v8::FunctionTemplate::New(Isolate, &SetPromiseRejectCallback<JSEngine>)->GetFunction(Context).ToLocalChecked()).Check();
+
+        JSObjectIdMap.Reset(Isolate, v8::Map::New(Isolate));
     }
 
     JSEngine::~JSEngine()
@@ -105,6 +110,7 @@ namespace puerts
             Inspector = nullptr;
         }
 
+        JSObjectIdMap.Reset();
         JsPromiseRejectCallback.Reset();
 
         for (int i = 0; i < Templates.size(); ++i)
@@ -160,23 +166,109 @@ namespace puerts
         }
     }
 
+    JSObject *JSEngine::CreateJSObject(v8::Isolate *InIsolate, v8::Local<v8::Context> InContext, v8::Local<v8::Object> InObject)
+    {
+        // PLog(puerts::Log, "[PuertsDLL][CreateJSObject]mutex");
+        std::lock_guard<std::mutex> guard(JSObjectsMutex);
+
+        // PLog(puerts::Log, "[PuertsDLL][CreateJSObject]ContextScope");
+        v8::Isolate::Scope IsolateScope(InIsolate);
+        v8::HandleScope HandleScope(InIsolate);
+        v8::Context::Scope ContextScope(InContext);
+
+        // PLog(puerts::Log, "[PuertsDLL][CreateJSObject]map get");
+        v8::Local<v8::Map> idmap = JSObjectIdMap.Get(InIsolate);
+        
+        // PLog(puerts::Log, "[PuertsDLL][CreateJSObject]get v8object id");
+        // 从idmap尝试取出该jsObject的id
+        v8::Local<v8::Value> v8ObjectIndex = idmap->Get(InContext, InObject).ToLocalChecked();
+        JSObject* jsObject = nullptr;
+
+        // PLog(puerts::Log, "[PuertsDLL][CreateJSObject]get jsobject");
+        // 如果存在该id，则从objectmap里取出该对象
+        if (!v8ObjectIndex->IsNullOrUndefined())
+        {
+            int32_t mapIndex = (int32_t)v8::Number::Cast(*v8ObjectIndex)->Value();
+            jsObject = JSObjectMap[mapIndex];
+        }
+
+        // 如果不存在id，则创建新对象
+        if (jsObject == nullptr) 
+        {
+            int32_t id = 0;
+            size_t freeIDSize = ObjectMapFreeIndex.size();
+            if (freeIDSize > 0) {
+                id = ObjectMapFreeIndex[freeIDSize - 1];
+                ObjectMapFreeIndex.pop_back();
+            }
+            else
+            {
+                id = JSObjectMap.size();
+            }
+            jsObject = new JSObject(InIsolate, InContext, InObject, id);
+            JSObjectMap[id] = jsObject;
+            idmap->Set(InContext, InObject, v8::Number::New(InIsolate, id));
+        }
+
+        return jsObject;
+    }
+
+    void JSEngine::ReleaseJSObject(JSObject *InObject)
+    {
+        std::lock_guard<std::mutex> guard(JSObjectsMutex);
+
+        // PLog(puerts::Log, std::to_string((long)InObject));
+        v8::Isolate* Isolate = InObject->Isolate;
+        v8::Isolate::Scope IsolateScope(Isolate);
+        v8::HandleScope HandleScope(Isolate);
+        v8::Local<v8::Context> Context = InObject->Context.Get(Isolate);
+        v8::Context::Scope ContextScope(Context);
+
+        v8::Local<v8::Map> idmap = JSObjectIdMap.Get(InObject->Isolate);
+        idmap->Set(
+            InObject->Context.Get(Isolate),
+            InObject->GObject.Get(Isolate),
+            v8::Undefined(Isolate)
+        );
+
+        JSObjectMap[InObject->Index] = nullptr;
+        
+        ObjectMapFreeIndex.push_back(InObject->Index);
+        delete InObject;
+    }
+
     JSFunction* JSEngine::CreateJSFunction(v8::Isolate* InIsolate, v8::Local<v8::Context> InContext, v8::Local<v8::Function> InFunction)
     {
         std::lock_guard<std::mutex> guard(JSFunctionsMutex);
-        JSFunction* Function = new JSFunction(InIsolate, InContext, InFunction);
-        JSFunctions.insert(Function);
+        auto maybeId = InFunction->Get(InContext, FV8Utils::V8String(InIsolate, FUNCTION_INDEX_KEY));
+        if (!maybeId.IsEmpty()) {
+            auto id = maybeId.ToLocalChecked();
+            if (id->IsNumber()) {
+                int32_t index = id->Int32Value(InContext).ToChecked();
+                return JSFunctions[index];
+            }
+        }
+        JSFunction* Function = nullptr;
+        for (int i = 0; i < JSFunctions.size(); i++) {
+            if (!JSFunctions[i]) {
+                Function = new JSFunction(InIsolate, InContext, InFunction, i);
+                JSFunctions[i] = Function;
+                break;
+            }
+        }
+        if (!Function) {
+            Function = new JSFunction(InIsolate, InContext, InFunction, static_cast<int32_t>(JSFunctions.size()));
+            JSFunctions.push_back(Function);
+        }
+        InFunction->Set(InContext, FV8Utils::V8String(InIsolate, FUNCTION_INDEX_KEY), v8::Integer::New(InIsolate, Function->Index));
         return Function;
     }
 
     void JSEngine::ReleaseJSFunction(JSFunction* InFunction)
     {
         std::lock_guard<std::mutex> guard(JSFunctionsMutex);
-        auto Iter = JSFunctions.find(InFunction);
-        if (Iter != JSFunctions.end())
-        {
-            JSFunctions.erase(Iter);
-            delete InFunction;
-        }
+        JSFunctions[InFunction->Index] = nullptr;
+        delete InFunction;
     }
 
     static void CSharpFunctionCallbackWrap(const v8::FunctionCallbackInfo<v8::Value>& Info)

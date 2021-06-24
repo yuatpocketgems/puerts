@@ -41,10 +41,8 @@
 static void* _FIntPointNew_(const v8::FunctionCallbackInfo<v8::Value>& Info)
 {
     v8::Isolate* Isolate = Info.GetIsolate();
-    v8::Isolate::Scope IsolateScope(Isolate);
     v8::HandleScope HandleScope(Isolate);
     v8::Local<v8::Context> Context = Isolate->GetCurrentContext();
-    v8::Context::Scope ContextScope(Context);
     if (Info.Length() == 0)
     {
         if (true)
@@ -94,10 +92,8 @@ static void* _FIntPointNew_(const v8::FunctionCallbackInfo<v8::Value>& Info)
 static void FIntPointM_op_Equality(const v8::FunctionCallbackInfo<v8::Value>& Info)
 {
     v8::Isolate* Isolate = Info.GetIsolate();
-    v8::Isolate::Scope IsolateScope(Isolate);
     v8::HandleScope HandleScope(Isolate);
     v8::Local<v8::Context> Context = Isolate->GetCurrentContext();
-    v8::Context::Scope ContextScope(Context);
     if (Info.Length() == 1)
     {
         if (
@@ -115,7 +111,7 @@ static void FIntPointM_op_Equality(const v8::FunctionCallbackInfo<v8::Value>& In
                 return;
             }
             auto MethodResult = Self->operator==(*Arg0);
-            auto V8Result =v8::Boolean::New(Isolate, MethodResult);
+            auto V8Result = v8::Boolean::New(Isolate, MethodResult);
             Info.GetReturnValue().Set(V8Result);
             
             return;
@@ -127,10 +123,8 @@ static void FIntPointM_op_Equality(const v8::FunctionCallbackInfo<v8::Value>& In
 static void FIntPointM_op_Inequality(const v8::FunctionCallbackInfo<v8::Value>& Info)
 {
     v8::Isolate* Isolate = Info.GetIsolate();
-    v8::Isolate::Scope IsolateScope(Isolate);
     v8::HandleScope HandleScope(Isolate);
     v8::Local<v8::Context> Context = Isolate->GetCurrentContext();
-    v8::Context::Scope ContextScope(Context);
     if (Info.Length() == 1)
     {
         if (
@@ -148,7 +142,7 @@ static void FIntPointM_op_Inequality(const v8::FunctionCallbackInfo<v8::Value>& 
                 return;
             }
             auto MethodResult = Self->operator!=(*Arg0);
-            auto V8Result =v8::Boolean::New(Isolate, MethodResult);
+            auto V8Result = v8::Boolean::New(Isolate, MethodResult);
             Info.GetReturnValue().Set(V8Result);
             
             return;
@@ -160,10 +154,8 @@ static void FIntPointM_op_Inequality(const v8::FunctionCallbackInfo<v8::Value>& 
 static void FIntPointM_op_Multiply(const v8::FunctionCallbackInfo<v8::Value>& Info)
 {
     v8::Isolate* Isolate = Info.GetIsolate();
-    v8::Isolate::Scope IsolateScope(Isolate);
     v8::HandleScope HandleScope(Isolate);
     v8::Local<v8::Context> Context = Isolate->GetCurrentContext();
-    v8::Context::Scope ContextScope(Context);
     if (Info.Length() == 1)
     {
         if (
@@ -178,10 +170,9 @@ static void FIntPointM_op_Multiply(const v8::FunctionCallbackInfo<v8::Value>& In
                 return;
             }
             auto MethodResult = Self->operator*(Arg0);
-            auto V8Result =v8::Undefined(Isolate).As<v8::Value>();
             void* Ptr = new FIntPoint(MethodResult);
                 
-            V8Result = puerts::DataTransfer::FindOrAddStruct<FIntPoint>(Isolate, Context, Ptr, false);
+            auto V8Result = puerts::DataTransfer::FindOrAddStruct<FIntPoint>(Isolate, Context, Ptr, false);
                 
             Info.GetReturnValue().Set(V8Result);
             
@@ -194,10 +185,8 @@ static void FIntPointM_op_Multiply(const v8::FunctionCallbackInfo<v8::Value>& In
 static void FIntPointM_op_Division(const v8::FunctionCallbackInfo<v8::Value>& Info)
 {
     v8::Isolate* Isolate = Info.GetIsolate();
-    v8::Isolate::Scope IsolateScope(Isolate);
     v8::HandleScope HandleScope(Isolate);
     v8::Local<v8::Context> Context = Isolate->GetCurrentContext();
-    v8::Context::Scope ContextScope(Context);
     if (Info.Length() == 1)
     {
         if (
@@ -212,10 +201,9 @@ static void FIntPointM_op_Division(const v8::FunctionCallbackInfo<v8::Value>& In
                 return;
             }
             auto MethodResult = Self->operator/(Arg0);
-            auto V8Result =v8::Undefined(Isolate).As<v8::Value>();
             void* Ptr = new FIntPoint(MethodResult);
                 
-            V8Result = puerts::DataTransfer::FindOrAddStruct<FIntPoint>(Isolate, Context, Ptr, false);
+            auto V8Result = puerts::DataTransfer::FindOrAddStruct<FIntPoint>(Isolate, Context, Ptr, false);
                 
             Info.GetReturnValue().Set(V8Result);
             
@@ -239,10 +227,9 @@ static void FIntPointM_op_Division(const v8::FunctionCallbackInfo<v8::Value>& In
                 return;
             }
             auto MethodResult = Self->operator/(*Arg0);
-            auto V8Result =v8::Undefined(Isolate).As<v8::Value>();
             void* Ptr = new FIntPoint(MethodResult);
                 
-            V8Result = puerts::DataTransfer::FindOrAddStruct<FIntPoint>(Isolate, Context, Ptr, false);
+            auto V8Result = puerts::DataTransfer::FindOrAddStruct<FIntPoint>(Isolate, Context, Ptr, false);
                 
             Info.GetReturnValue().Set(V8Result);
             
@@ -255,10 +242,8 @@ static void FIntPointM_op_Division(const v8::FunctionCallbackInfo<v8::Value>& In
 static void FIntPointM_op_Addition(const v8::FunctionCallbackInfo<v8::Value>& Info)
 {
     v8::Isolate* Isolate = Info.GetIsolate();
-    v8::Isolate::Scope IsolateScope(Isolate);
     v8::HandleScope HandleScope(Isolate);
     v8::Local<v8::Context> Context = Isolate->GetCurrentContext();
-    v8::Context::Scope ContextScope(Context);
     if (Info.Length() == 1)
     {
         if (
@@ -276,10 +261,9 @@ static void FIntPointM_op_Addition(const v8::FunctionCallbackInfo<v8::Value>& In
                 return;
             }
             auto MethodResult = Self->operator+(*Arg0);
-            auto V8Result =v8::Undefined(Isolate).As<v8::Value>();
             void* Ptr = new FIntPoint(MethodResult);
                 
-            V8Result = puerts::DataTransfer::FindOrAddStruct<FIntPoint>(Isolate, Context, Ptr, false);
+            auto V8Result = puerts::DataTransfer::FindOrAddStruct<FIntPoint>(Isolate, Context, Ptr, false);
                 
             Info.GetReturnValue().Set(V8Result);
             
@@ -292,10 +276,8 @@ static void FIntPointM_op_Addition(const v8::FunctionCallbackInfo<v8::Value>& In
 static void FIntPointM_op_Subtraction(const v8::FunctionCallbackInfo<v8::Value>& Info)
 {
     v8::Isolate* Isolate = Info.GetIsolate();
-    v8::Isolate::Scope IsolateScope(Isolate);
     v8::HandleScope HandleScope(Isolate);
     v8::Local<v8::Context> Context = Isolate->GetCurrentContext();
-    v8::Context::Scope ContextScope(Context);
     if (Info.Length() == 1)
     {
         if (
@@ -313,10 +295,9 @@ static void FIntPointM_op_Subtraction(const v8::FunctionCallbackInfo<v8::Value>&
                 return;
             }
             auto MethodResult = Self->operator-(*Arg0);
-            auto V8Result =v8::Undefined(Isolate).As<v8::Value>();
             void* Ptr = new FIntPoint(MethodResult);
                 
-            V8Result = puerts::DataTransfer::FindOrAddStruct<FIntPoint>(Isolate, Context, Ptr, false);
+            auto V8Result = puerts::DataTransfer::FindOrAddStruct<FIntPoint>(Isolate, Context, Ptr, false);
                 
             Info.GetReturnValue().Set(V8Result);
             
@@ -329,10 +310,8 @@ static void FIntPointM_op_Subtraction(const v8::FunctionCallbackInfo<v8::Value>&
 static void FIntPointM_set_Item(const v8::FunctionCallbackInfo<v8::Value>& Info)
 {
     v8::Isolate* Isolate = Info.GetIsolate();
-    v8::Isolate::Scope IsolateScope(Isolate);
     v8::HandleScope HandleScope(Isolate);
     v8::Local<v8::Context> Context = Isolate->GetCurrentContext();
-    v8::Context::Scope ContextScope(Context);
     if (Info.Length() == 1)
     {
         if (
@@ -357,10 +336,8 @@ static void FIntPointM_set_Item(const v8::FunctionCallbackInfo<v8::Value>& Info)
 static void FIntPointM_get_Item(const v8::FunctionCallbackInfo<v8::Value>& Info)
 {
     v8::Isolate* Isolate = Info.GetIsolate();
-    v8::Isolate::Scope IsolateScope(Isolate);
     v8::HandleScope HandleScope(Isolate);
     v8::Local<v8::Context> Context = Isolate->GetCurrentContext();
-    v8::Context::Scope ContextScope(Context);
     if (Info.Length() == 1)
     {
         if (
@@ -375,7 +352,7 @@ static void FIntPointM_get_Item(const v8::FunctionCallbackInfo<v8::Value>& Info)
                 return;
             }
             auto MethodResult = Self->operator[](Arg0);
-            auto V8Result =v8::Integer::New(Isolate, MethodResult);
+            auto V8Result = v8::Integer::New(Isolate, MethodResult);
             Info.GetReturnValue().Set(V8Result);
             
             return;
@@ -387,10 +364,8 @@ static void FIntPointM_get_Item(const v8::FunctionCallbackInfo<v8::Value>& Info)
 static void FIntPointM_ComponentMin(const v8::FunctionCallbackInfo<v8::Value>& Info)
 {
     v8::Isolate* Isolate = Info.GetIsolate();
-    v8::Isolate::Scope IsolateScope(Isolate);
     v8::HandleScope HandleScope(Isolate);
     v8::Local<v8::Context> Context = Isolate->GetCurrentContext();
-    v8::Context::Scope ContextScope(Context);
     if (Info.Length() == 1)
     {
         if (
@@ -408,10 +383,9 @@ static void FIntPointM_ComponentMin(const v8::FunctionCallbackInfo<v8::Value>& I
                 return;
             }
             auto MethodResult = Self->ComponentMin(*Arg0);
-            auto V8Result =v8::Undefined(Isolate).As<v8::Value>();
             void* Ptr = new FIntPoint(MethodResult);
                 
-            V8Result = puerts::DataTransfer::FindOrAddStruct<FIntPoint>(Isolate, Context, Ptr, false);
+            auto V8Result = puerts::DataTransfer::FindOrAddStruct<FIntPoint>(Isolate, Context, Ptr, false);
                 
             Info.GetReturnValue().Set(V8Result);
             
@@ -424,10 +398,8 @@ static void FIntPointM_ComponentMin(const v8::FunctionCallbackInfo<v8::Value>& I
 static void FIntPointM_ComponentMax(const v8::FunctionCallbackInfo<v8::Value>& Info)
 {
     v8::Isolate* Isolate = Info.GetIsolate();
-    v8::Isolate::Scope IsolateScope(Isolate);
     v8::HandleScope HandleScope(Isolate);
     v8::Local<v8::Context> Context = Isolate->GetCurrentContext();
-    v8::Context::Scope ContextScope(Context);
     if (Info.Length() == 1)
     {
         if (
@@ -445,10 +417,9 @@ static void FIntPointM_ComponentMax(const v8::FunctionCallbackInfo<v8::Value>& I
                 return;
             }
             auto MethodResult = Self->ComponentMax(*Arg0);
-            auto V8Result =v8::Undefined(Isolate).As<v8::Value>();
             void* Ptr = new FIntPoint(MethodResult);
                 
-            V8Result = puerts::DataTransfer::FindOrAddStruct<FIntPoint>(Isolate, Context, Ptr, false);
+            auto V8Result = puerts::DataTransfer::FindOrAddStruct<FIntPoint>(Isolate, Context, Ptr, false);
                 
             Info.GetReturnValue().Set(V8Result);
             
@@ -461,10 +432,8 @@ static void FIntPointM_ComponentMax(const v8::FunctionCallbackInfo<v8::Value>& I
 static void FIntPointM_GetMax(const v8::FunctionCallbackInfo<v8::Value>& Info)
 {
     v8::Isolate* Isolate = Info.GetIsolate();
-    v8::Isolate::Scope IsolateScope(Isolate);
     v8::HandleScope HandleScope(Isolate);
     v8::Local<v8::Context> Context = Isolate->GetCurrentContext();
-    v8::Context::Scope ContextScope(Context);
     if (Info.Length() == 0)
     {
         if (true)
@@ -477,7 +446,7 @@ static void FIntPointM_GetMax(const v8::FunctionCallbackInfo<v8::Value>& Info)
                 return;
             }
             auto MethodResult = Self->GetMax();
-            auto V8Result =v8::Integer::New(Isolate, MethodResult);
+            auto V8Result = v8::Integer::New(Isolate, MethodResult);
             Info.GetReturnValue().Set(V8Result);
             
             return;
@@ -489,10 +458,8 @@ static void FIntPointM_GetMax(const v8::FunctionCallbackInfo<v8::Value>& Info)
 static void FIntPointM_GetMin(const v8::FunctionCallbackInfo<v8::Value>& Info)
 {
     v8::Isolate* Isolate = Info.GetIsolate();
-    v8::Isolate::Scope IsolateScope(Isolate);
     v8::HandleScope HandleScope(Isolate);
     v8::Local<v8::Context> Context = Isolate->GetCurrentContext();
-    v8::Context::Scope ContextScope(Context);
     if (Info.Length() == 0)
     {
         if (true)
@@ -505,7 +472,7 @@ static void FIntPointM_GetMin(const v8::FunctionCallbackInfo<v8::Value>& Info)
                 return;
             }
             auto MethodResult = Self->GetMin();
-            auto V8Result =v8::Integer::New(Isolate, MethodResult);
+            auto V8Result = v8::Integer::New(Isolate, MethodResult);
             Info.GetReturnValue().Set(V8Result);
             
             return;
@@ -517,10 +484,8 @@ static void FIntPointM_GetMin(const v8::FunctionCallbackInfo<v8::Value>& Info)
 static void FIntPointM_Size(const v8::FunctionCallbackInfo<v8::Value>& Info)
 {
     v8::Isolate* Isolate = Info.GetIsolate();
-    v8::Isolate::Scope IsolateScope(Isolate);
     v8::HandleScope HandleScope(Isolate);
     v8::Local<v8::Context> Context = Isolate->GetCurrentContext();
-    v8::Context::Scope ContextScope(Context);
     if (Info.Length() == 0)
     {
         if (true)
@@ -533,7 +498,7 @@ static void FIntPointM_Size(const v8::FunctionCallbackInfo<v8::Value>& Info)
                 return;
             }
             auto MethodResult = Self->Size();
-            auto V8Result =v8::Integer::New(Isolate, MethodResult);
+            auto V8Result = v8::Integer::New(Isolate, MethodResult);
             Info.GetReturnValue().Set(V8Result);
             
             return;
@@ -545,10 +510,8 @@ static void FIntPointM_Size(const v8::FunctionCallbackInfo<v8::Value>& Info)
 static void FIntPointM_SizeSquared(const v8::FunctionCallbackInfo<v8::Value>& Info)
 {
     v8::Isolate* Isolate = Info.GetIsolate();
-    v8::Isolate::Scope IsolateScope(Isolate);
     v8::HandleScope HandleScope(Isolate);
     v8::Local<v8::Context> Context = Isolate->GetCurrentContext();
-    v8::Context::Scope ContextScope(Context);
     if (Info.Length() == 0)
     {
         if (true)
@@ -561,7 +524,7 @@ static void FIntPointM_SizeSquared(const v8::FunctionCallbackInfo<v8::Value>& In
                 return;
             }
             auto MethodResult = Self->SizeSquared();
-            auto V8Result =v8::Integer::New(Isolate, MethodResult);
+            auto V8Result = v8::Integer::New(Isolate, MethodResult);
             Info.GetReturnValue().Set(V8Result);
             
             return;
@@ -573,10 +536,8 @@ static void FIntPointM_SizeSquared(const v8::FunctionCallbackInfo<v8::Value>& In
 static void FIntPointM_ToString(const v8::FunctionCallbackInfo<v8::Value>& Info)
 {
     v8::Isolate* Isolate = Info.GetIsolate();
-    v8::Isolate::Scope IsolateScope(Isolate);
     v8::HandleScope HandleScope(Isolate);
     v8::Local<v8::Context> Context = Isolate->GetCurrentContext();
-    v8::Context::Scope ContextScope(Context);
     if (Info.Length() == 0)
     {
         if (true)
@@ -589,7 +550,7 @@ static void FIntPointM_ToString(const v8::FunctionCallbackInfo<v8::Value>& Info)
                 return;
             }
             auto MethodResult = Self->ToString();
-            auto V8Result =v8::String::NewFromUtf8(Isolate, TCHAR_TO_UTF8(*MethodResult), v8::NewStringType::kNormal).ToLocalChecked();
+            auto V8Result = v8::String::NewFromUtf8(Isolate, TCHAR_TO_UTF8(*MethodResult), v8::NewStringType::kNormal).ToLocalChecked();
             Info.GetReturnValue().Set(V8Result);
             
             return;
@@ -601,10 +562,8 @@ static void FIntPointM_ToString(const v8::FunctionCallbackInfo<v8::Value>& Info)
 static void FIntPointS_DivideAndRoundUp(const v8::FunctionCallbackInfo<v8::Value>& Info)
 {
     v8::Isolate* Isolate = Info.GetIsolate();
-    v8::Isolate::Scope IsolateScope(Isolate);
     v8::HandleScope HandleScope(Isolate);
     v8::Local<v8::Context> Context = Isolate->GetCurrentContext();
-    v8::Context::Scope ContextScope(Context);
     if (Info.Length() == 2)
     {
         if (
@@ -618,10 +577,9 @@ static void FIntPointS_DivideAndRoundUp(const v8::FunctionCallbackInfo<v8::Value
             FIntPoint* Arg0 = puerts::DataTransfer::GetPoninterFast<FIntPoint>(Info[0]->ToObject(Context).ToLocalChecked());
             int32 Arg1 = Info[1]->ToInteger(Context).ToLocalChecked()->Value();
             auto MethodResult = FIntPoint::DivideAndRoundUp(*Arg0, Arg1);
-            auto V8Result =v8::Undefined(Isolate).As<v8::Value>();
             void* Ptr = new FIntPoint(MethodResult);
                 
-            V8Result = puerts::DataTransfer::FindOrAddStruct<FIntPoint>(Isolate, Context, Ptr, false);
+            auto V8Result = puerts::DataTransfer::FindOrAddStruct<FIntPoint>(Isolate, Context, Ptr, false);
                 
             Info.GetReturnValue().Set(V8Result);
             
@@ -644,10 +602,9 @@ static void FIntPointS_DivideAndRoundUp(const v8::FunctionCallbackInfo<v8::Value
             FIntPoint* Arg0 = puerts::DataTransfer::GetPoninterFast<FIntPoint>(Info[0]->ToObject(Context).ToLocalChecked());
             FIntPoint* Arg1 = puerts::DataTransfer::GetPoninterFast<FIntPoint>(Info[1]->ToObject(Context).ToLocalChecked());
             auto MethodResult = FIntPoint::DivideAndRoundUp(*Arg0, *Arg1);
-            auto V8Result =v8::Undefined(Isolate).As<v8::Value>();
             void* Ptr = new FIntPoint(MethodResult);
                 
-            V8Result = puerts::DataTransfer::FindOrAddStruct<FIntPoint>(Isolate, Context, Ptr, false);
+            auto V8Result = puerts::DataTransfer::FindOrAddStruct<FIntPoint>(Isolate, Context, Ptr, false);
                 
             Info.GetReturnValue().Set(V8Result);
             
@@ -660,10 +617,8 @@ static void FIntPointS_DivideAndRoundUp(const v8::FunctionCallbackInfo<v8::Value
 static void FIntPointS_DivideAndRoundDown(const v8::FunctionCallbackInfo<v8::Value>& Info)
 {
     v8::Isolate* Isolate = Info.GetIsolate();
-    v8::Isolate::Scope IsolateScope(Isolate);
     v8::HandleScope HandleScope(Isolate);
     v8::Local<v8::Context> Context = Isolate->GetCurrentContext();
-    v8::Context::Scope ContextScope(Context);
     if (Info.Length() == 2)
     {
         if (
@@ -677,10 +632,9 @@ static void FIntPointS_DivideAndRoundDown(const v8::FunctionCallbackInfo<v8::Val
             FIntPoint* Arg0 = puerts::DataTransfer::GetPoninterFast<FIntPoint>(Info[0]->ToObject(Context).ToLocalChecked());
             int32 Arg1 = Info[1]->ToInteger(Context).ToLocalChecked()->Value();
             auto MethodResult = FIntPoint::DivideAndRoundDown(*Arg0, Arg1);
-            auto V8Result =v8::Undefined(Isolate).As<v8::Value>();
             void* Ptr = new FIntPoint(MethodResult);
                 
-            V8Result = puerts::DataTransfer::FindOrAddStruct<FIntPoint>(Isolate, Context, Ptr, false);
+            auto V8Result = puerts::DataTransfer::FindOrAddStruct<FIntPoint>(Isolate, Context, Ptr, false);
                 
             Info.GetReturnValue().Set(V8Result);
             
@@ -693,17 +647,15 @@ static void FIntPointS_DivideAndRoundDown(const v8::FunctionCallbackInfo<v8::Val
 static void FIntPointS_Num(const v8::FunctionCallbackInfo<v8::Value>& Info)
 {
     v8::Isolate* Isolate = Info.GetIsolate();
-    v8::Isolate::Scope IsolateScope(Isolate);
     v8::HandleScope HandleScope(Isolate);
     v8::Local<v8::Context> Context = Isolate->GetCurrentContext();
-    v8::Context::Scope ContextScope(Context);
     if (Info.Length() == 0)
     {
         if (true)
         {
             
             auto MethodResult = FIntPoint::Num();
-            auto V8Result =v8::Integer::New(Isolate, MethodResult);
+            auto V8Result = v8::Integer::New(Isolate, MethodResult);
             Info.GetReturnValue().Set(V8Result);
             
             return;
@@ -715,10 +667,8 @@ static void FIntPointS_Num(const v8::FunctionCallbackInfo<v8::Value>& Info)
 static void _FIntPointXGet_(v8::Local<v8::Name> Property, const v8::PropertyCallbackInfo<v8::Value>& Info)
 {
     v8::Isolate* Isolate = Info.GetIsolate();
-    v8::Isolate::Scope IsolateScope(Isolate);
     v8::HandleScope HandleScope(Isolate);
     v8::Local<v8::Context> Context = Isolate->GetCurrentContext();
-    v8::Context::Scope ContextScope(Context);
 
     auto Self = puerts::DataTransfer::GetPoninterFast<FIntPoint>(Info.This());
 
@@ -728,10 +678,8 @@ static void _FIntPointXGet_(v8::Local<v8::Name> Property, const v8::PropertyCall
 static void _FIntPointXSet_(v8::Local<v8::Name> Property, v8::Local<v8::Value> Value, const v8::PropertyCallbackInfo<void>& Info)
 {
     v8::Isolate* Isolate = Info.GetIsolate();
-    v8::Isolate::Scope IsolateScope(Isolate);
     v8::HandleScope HandleScope(Isolate);
     v8::Local<v8::Context> Context = Isolate->GetCurrentContext();
-    v8::Context::Scope ContextScope(Context);
 
     auto Self = puerts::DataTransfer::GetPoninterFast<FIntPoint>(Info.This());
 
@@ -740,10 +688,8 @@ static void _FIntPointXSet_(v8::Local<v8::Name> Property, v8::Local<v8::Value> V
 static void _FIntPointYGet_(v8::Local<v8::Name> Property, const v8::PropertyCallbackInfo<v8::Value>& Info)
 {
     v8::Isolate* Isolate = Info.GetIsolate();
-    v8::Isolate::Scope IsolateScope(Isolate);
     v8::HandleScope HandleScope(Isolate);
     v8::Local<v8::Context> Context = Isolate->GetCurrentContext();
-    v8::Context::Scope ContextScope(Context);
 
     auto Self = puerts::DataTransfer::GetPoninterFast<FIntPoint>(Info.This());
 
@@ -753,10 +699,8 @@ static void _FIntPointYGet_(v8::Local<v8::Name> Property, const v8::PropertyCall
 static void _FIntPointYSet_(v8::Local<v8::Name> Property, v8::Local<v8::Value> Value, const v8::PropertyCallbackInfo<void>& Info)
 {
     v8::Isolate* Isolate = Info.GetIsolate();
-    v8::Isolate::Scope IsolateScope(Isolate);
     v8::HandleScope HandleScope(Isolate);
     v8::Local<v8::Context> Context = Isolate->GetCurrentContext();
-    v8::Context::Scope ContextScope(Context);
 
     auto Self = puerts::DataTransfer::GetPoninterFast<FIntPoint>(Info.This());
 

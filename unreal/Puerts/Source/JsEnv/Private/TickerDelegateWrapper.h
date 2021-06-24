@@ -7,7 +7,7 @@
 
 #pragma once
 
-#if PLATFORM_ANDROID || PLATFORM_WINDOWS || PLATFORM_IOS || PLATFORM_MAC
+#if PLATFORM_ANDROID || PLATFORM_WINDOWS || PLATFORM_IOS || PLATFORM_MAC || PLATFORM_LINUX
 
 #include "CoreMinimal.h"
 #include <functional>
@@ -35,6 +35,10 @@ public:
     bool CallFunction(float);
 
     void SetDelegateHandle(FDelegateHandle* Handle);
+
+    bool IsCalling = false;
+
+    bool FunctionContinue;
     
 private:
     v8::Isolate* Isolate;
@@ -54,9 +58,7 @@ private:
 
     v8::Global<v8::Function>& GetFunction();
 
-    const bool FunctionContinue;
-
     FDelegateHandle* DelegateHandle;
 };
 
-#endif  // PLATFORM_ANDROID || PLATFORM_WINDOWS || PLATFORM_IOS || PLATFORM_MAC
+#endif  // PLATFORM_ANDROID || PLATFORM_WINDOWS || PLATFORM_IOS || PLATFORM_MAC || PLATFORM_LINUX

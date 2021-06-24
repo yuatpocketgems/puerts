@@ -6,11 +6,15 @@
 */
 
 using System.IO;
+using System.Reflection;
 using Puerts;
 
 public class TxtLoader : ILoader
 {
-    private string root = "../../Assets/Puerts/Src/Resources";
+    private string root = Path.Combine(
+        System.Text.RegularExpressions.Regex.Replace(Path.GetDirectoryName(Assembly.GetExecutingAssembly().GetName().CodeBase), "^file:(\\\\)?", ""),
+        "../../Assets/Puerts/Src/Resources"
+    );
 
     public bool FileExists(string filepath)
     {
@@ -30,9 +34,9 @@ public class PuertsTest
     {
         var jsEnv = new JsEnv(new TxtLoader());
         jsEnv.Eval(@"
-                const CS = require('csharp');
-                CS.System.Console.WriteLine('hello world');
-            ");
+            const CS = require('csharp');
+            CS.System.Console.WriteLine('hello world');
+        ");
 
         jsEnv.Dispose();
     }

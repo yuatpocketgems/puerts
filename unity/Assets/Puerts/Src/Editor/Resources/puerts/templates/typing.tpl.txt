@@ -1,6 +1,6 @@
 {{
-function parameterDef(pinfo) {
-    return (pinfo.IsParams ? ("..." + pinfo.Name) : "$" + pinfo.Name) + (pinfo.IsOptional?"?":"") + ": " + pinfo.TypeName;
+function parameterDef(pinfo, isStatic, type) {
+    return (pinfo.IsParams ? ("..." + pinfo.Name) : "$" + pinfo.Name) + (pinfo.IsOptional?"?":"") + ": " + (isStatic ? typeNameWithOutGenericType(type, pinfo.TypeName) : pinfo.TypeName);
 }
 function typeKeyword(type) {
     if (type.IsDelegate) {
@@ -14,15 +14,43 @@ function typeKeyword(type) {
     }
 }
 
+function toJsArray(csArr) {
+    let arr = [];
+    for(var i = 0; i < csArr.Length; i++) {
+        arr.push(csArr.get_Item(i));
+    }
+    return arr;
+}
+function formatPropertyOrMethodName(name) {
+    /*处理explicit interface implementation*/
+    if (name.indexOf(".") != -1) {
+        return name.split(".").pop();
+    } else {
+        return name;
+    }
+}
+function distinctByName(arr) {
+    const exist = {};
+    return toJsArray(arr).filter(item=> {
+        const itemExist = exist[item.Name];
+        exist[item.Name] = true;
+        return !itemExist;
+    });
+
+}
 function typeDeclaration(type, level1) {
     var result = type.Name;
     if (type.IsGenericTypeDefinition) {
-        result += "<" + Array.prototype.join.call(type.GenericParameters, ',') + ">";
+        result += "<" + Array.prototype.join.call(toJsArray(type.GenericParameters), ',') + ">";
     }
     if (level1 && type.BaseType) {
         result += " extends " + typeDeclaration(type.BaseType);
     }
-    if(!level1 && type.Namespace) {
+    var interfaces = type.interfaces ? toJsArray(type.interfaces) : [];
+    if (level1 && !type.IsDelegate && !type.IsEnum && interfaces.length) {
+        result += ((type.IsInterface ? " extends " : " implements ") + interfaces.map(interface=> typeDeclaration(interface)).join(','))
+    }
+    if (!level1 && type.Namespace) {
         result = type.Namespace + "." + result;
     }
     return result;
@@ -35,6 +63,13 @@ function indent(str, n) {
         if (lines[i]) newLines.push(append + lines[i]);
     }
     return newLines.join('\n');
+}
+function typeNameWithOutGenericType(type, name) {
+    if (type.IsGenericTypeDefinition) {
+        const gParameters = toJsArray(type.GenericParameters);
+        return gParameters.indexOf(name) != -1 ? "any" : name
+    }
+    return name;
 }
 }}
 declare module 'csharp' {
@@ -56,17 +91,18 @@ declare module 'csharp' {
         {{~ns.Types :type}}{{=indent(type.Document, 8)}}
         {{=typeKeyword(type)}} {{=typeDeclaration(type, true)}} {{if(type.IsDelegate){}}= {{=type.DelegateDef}};{{?!type.IsGenericTypeDefinition}}
         var {{=type.Name}}: {new (func: {{=type.DelegateDef}}): {{=type.Name}};}{{?}}{{ } else if(type.IsEnum) { }}{ {{=type.EnumKeyValues}} }{{ }else{ }}{
-            {{~type.Properties :property}}{{=indent(property.Document, 12)}}
-            {{?type.IsInterface}}{{=property.Name}}: {{=property.TypeName}};{{?}}{{?!type.IsInterface}}{{?property.HasGetter}}public {{?property.IsStatic}}static {{?}}get {{=property.Name}}(): {{=property.TypeName}};{{?}}{{?property.HasGetter && property.HasSetter}}
-            {{?}}{{?property.HasSetter}}public {{?property.IsStatic}}static {{?}}set {{=property.Name}}(value: {{=property.TypeName}});{{?}}{{?!property.HasSetter && !property.HasGetter}}public {{?property.IsStatic}}static {{?}}{{=property.Name}}: {{=property.TypeName}};{{?}}{{?}}
-            {{~}}{{~type.Methods :method}}{{=indent(method.Document, 12)}}
-            {{?!type.IsInterface}}public {{?}}{{?method.IsStatic}}static {{?}}{{=method.Name}}({{~method.ParameterInfos :pinfo:idx}}{{?idx>0}}, {{?}}{{=parameterDef(pinfo)}}{{~}}){{=method.IsConstructor?"":":" + method.TypeName}};
+            {{ var props = distinctByName(type.Properties); for (var i = 0; i < props.length; i++) { var property = props[i]; }}{{=indent(property.Document, 12)}}
+            {{?type.IsInterface}}{{=formatPropertyOrMethodName(property.Name)}}: {{=property.TypeName}};{{?}}{{?!type.IsInterface}}{{?property.HasGetter}}public {{?property.IsStatic}}static {{?}}get {{=formatPropertyOrMethodName(property.Name)}}(): {{=property.IsStatic ? typeNameWithOutGenericType(type, property.TypeName) : property.TypeName}};{{?}}{{?property.HasGetter && property.HasSetter}}
+            {{?}}{{?property.HasSetter}}public {{?property.IsStatic}}static {{?}}set {{=formatPropertyOrMethodName(property.Name)}}(value: {{=property.IsStatic ? typeNameWithOutGenericType(type, property.TypeName) : property.TypeName}});{{?}}{{?!property.HasSetter && !property.HasGetter}}public {{?property.IsStatic}}static {{?}}{{=formatPropertyOrMethodName(property.Name)}}: {{=property.IsStatic ? typeNameWithOutGenericType(type, property.TypeName) : property.TypeName}};{{?}}{{?}}
+            {{ } }}{{~type.Methods :method}}{{=indent(method.Document, 12)}}
+            {{?!type.IsInterface}}public {{?}}{{?method.IsStatic}}static {{?}}{{=formatPropertyOrMethodName(method.Name)}}({{~method.ParameterInfos :pinfo:idx}}{{?idx>0}}, {{?}}{{=parameterDef(pinfo, method.IsStatic, type)}}{{~}}){{=method.IsConstructor?"":":" + (method.isStatic ? typeNameWithOutGenericType(type, method.TypeName) : method.TypeName)}};
             {{~}}
-        }{{}}}{{?type.ExtensionMethods.Length > 0}}
+        }{{}}}
+        {{?type.ExtensionMethods.Length > 0}}
         {{=indent(type.Document, 8)}}
         interface {{=type.Name}} {
             {{~type.ExtensionMethods :method}}{{=indent(method.Document, 12)}}
-            {{=method.Name}}({{~method.ParameterInfos :pinfo:idx}}{{?idx>0}}, {{?}}{{=parameterDef(pinfo)}}{{~}}):{{=method.TypeName}};
+            {{=formatPropertyOrMethodName(method.Name)}}({{~method.ParameterInfos :pinfo:idx}}{{?idx>0}}, {{?}}{{=parameterDef(pinfo)}}{{~}}):{{=method.TypeName}};
             {{~}}
         }
         {{?}}

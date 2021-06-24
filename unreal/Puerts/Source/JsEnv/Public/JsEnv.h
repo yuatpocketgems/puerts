@@ -17,7 +17,7 @@
 #include "UObject/GCObject.h"
 #include "Containers/Ticker.h"
 #include "ObjectRetainer.h"
-#include "JSEngine.h"
+#include "JSLogger.h"
 #include "JSModuleLoader.h"
 #include "ExtensionMethods.h"
 
@@ -30,7 +30,17 @@ public:
 
     virtual void LowMemoryNotification() = 0;
 
-    virtual void WaitDebugger() = 0;
+    virtual void WaitDebugger(double timeout) = 0;
+
+    virtual void TryBindJs(const class UObjectBase *InObject) = 0;
+
+    virtual void ReloadModule(FName ModuleName, const FString& JsSource) = 0;
+
+    virtual void RebindJs() = 0;
+
+    virtual FString CurrentStackTrace() = 0;
+
+    virtual void InitExtensionMethodsMap() = 0;
 
     virtual ~IJsEnv() {}
 };
@@ -40,13 +50,24 @@ class JSENV_API FJsEnv// : public TSharedFromThis<FJsEnv> // only a wrapper
 public:
     explicit FJsEnv(const FString &ScriptRoot = TEXT("JavaScript"));
 
-    FJsEnv(std::unique_ptr<IJSModuleLoader> InModuleLoader, std::shared_ptr<ILogger> InLogger, int InDebugPort);
+    FJsEnv(std::unique_ptr<IJSModuleLoader> InModuleLoader, std::shared_ptr<ILogger> InLogger, int InDebugPort,
+        void* InExternalRuntime = nullptr, void* InExternalContext = nullptr);
 
     void Start(const FString& ModuleName, const TArray<TPair<FString, UObject*>> &Arguments = TArray<TPair<FString, UObject*>>());
 
     void LowMemoryNotification();
 
-    void WaitDebugger();
+    void WaitDebugger(double timeout = 0);
+
+    void TryBindJs(const class UObjectBase *InObject);
+
+    void ReloadModule(FName ModuleName, const FString& JsSource);
+
+    void RebindJs();
+
+    FString CurrentStackTrace();
+
+    void InitExtensionMethodsMap();
 
 private:
     std::unique_ptr<IJsEnv> GameScript;
